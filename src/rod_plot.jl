@@ -12,7 +12,7 @@ function plot(r::basic_rod)
     fig = PyPlot.figure()
     ax = PyPlot.axes(projection="3d")
     ax.plot(r.x[1,:], r.x[2,:], r.x[3,:], "-ok")
-    ax.quiver(xd[1,:], xd[2,:], xd[3,:], 
+    ax.quiver(xd[1,:], xd[2,:], xd[3,:],
                   r.d[1,:], r.d[2,:], r.d[3,:],
                   length=0.1, normalize=true)
     PyPlot.xlabel("x")
@@ -21,3 +21,20 @@ function plot(r::basic_rod)
     PyPlot.pygui(true)
     display(fig)
 end
+#
+# import Plots
+# function plot(r::basic_rod)
+#
+#      # Setup quiver points
+#      xd = similar(r.d)
+#      xd[:,1] = r.x[:,1]
+#      xd[:,end] = r.x[:,end]
+#      xd[:,2:end-1] = 0.5*(r.x[:,2:end-2] + r.x[:,3:end-1])
+#
+#      # Create a figure and axes
+#      q = Plots.quiver(xd[1,:], xd[2,:], xd[3,:],
+#                    quiver = (r.d[1,:], r.d[2,:], r.d[3,:]), arrow=:arrow)
+#
+#      Plots.plot!(q, xlabel="x", ylabel = "x", zlabel = "z")
+#      q
+#  end

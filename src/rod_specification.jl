@@ -66,7 +66,7 @@ end
 Returns two functions x and d defining the centerline and directors of a rod.
 
 These are determined by solving the ODE which defines a Bishop frame with
-curvatures `κ1(s)`, `κ2(s)`, and `τ(s)`. The itnegration starts from initial conditions
+curvatures `κ1(s)`, `κ2(s)`, and `τ(s)`. The integration starts from initial conditions
 `x0`, `t0`, and `d0`, and covers length `s = [s1, s2]`
 
 
@@ -87,9 +87,9 @@ julia> xfun, dfun = continuous_rod([0,0,0], [1,0,0], [0,0,1],
  end
 
  """
-    discrete_rod(x0, t0, d0, κ1, κ2, τ, s, N)
+    discrete_rod(xfun, dfun, s, N)
 
-Return a dicrete approximation to continuous_rod(x0, t0, d0, κ1, κ2, τ, s).
+Return a rod with centerline and directors approximating xfun(s) and dfun(s)
 
 Directors and centerline are sampled from the continous curve, and then
 any tangential component of the directors is removed by projection.
@@ -118,7 +118,7 @@ function discrete_rod(xfun::Function, dfun::Function, s, N::Int)
  end
 
 """
-    material2stiffness(E, ν, a, b)
+    elliptical_stiffness(E, ν, a, b)
 
 Return the elastic properties of a rod with elliptical section.
 
@@ -127,7 +127,7 @@ Return the elastic properties of a rod with elliptical section.
 - `ν`: Poisson Ratio
 - `a`, `b`: Radii of the cross section
 """
-function material2stiffness(E, ν, a, b)
+function elliptical_stiffness(E, ν, a, b)
     G = E/(2*(1 + ν))
     A = π*a*b
     k = E*A
@@ -135,8 +135,3 @@ function material2stiffness(E, ν, a, b)
     β = G*A*(a^2 + b^2)/4
     scalar_rod_properties(k, B, β)
 end
-
-# Properties From Continuous Functions
-# k(s) -> stretching stiffness
-# B(s) -> bending stiffness (principal components)
-# β(s) -> twisting stiffness

@@ -1,52 +1,47 @@
 using LinearAlgebra
+using StaticArrays
 
-#----------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------
 # Overloads for sets of 3-vectors stored as 3xN matrices
-#----------------------------------------------------------------------------------
-function cross3!(a::AbstractArray, b::AbstractArray)
+# ----------------------------------------------------------------------------------
 
-    # Size Checks
-    @assert size(a,2) == size(b,2)
-    @assert size(a,1) == 3
-    @assert size(b,1) == 3
+function cross3(a,b)
+    a1 = @view a[1,:]
+    a2 = @view a[2,:]
+    a3 = @view a[3,:]
 
-    # Action
-    @inbounds for i = 1:size(a,2)
-        a[:,i] = cross(a[:,i], b[:,i])
-    end   
-end
+    b1 = @view b[1,:]
+    b2 = @view b[2,:]
+    b3 = @view b[3,:]
 
-function cross3(a::AbstractArray, b::AbstractArray)
-
-    # Size Checks
-    @assert size(a,2) == size(b,2)
-    @assert size(a,1) == 3
-    @assert size(b,1) == 3
-
-    # Action
     c = similar(a)
-    @inbounds for i = 1:size(a,2)
-        c[:,i] = cross(a[:,i], b[:,i])
-    end
-    c   
+    c[1,:] .= @. a2*b3 - a3*b2
+    c[2,:] .= @. a3*b1 - a1*b3
+    c[3,:] .= @. a1*b2 - a2*b1
+
+    c
 end
 
 function dot3(a,b)
     sum(a.*b, dims=1)
 end
 
-function norm3(a)
-    sqrt.(sum(a.*a, dims=1))
+function norm3!(a)
+    a ./= sqrt.(sum(abs2, a, dims=1))
 end
 
-#----------------------------------------------------------------------------------
+function norm3(a)
+    sqrt.(sum(abs2, a, dims=1))
+end
+
+# ----------------------------------------------------------------------------------
 # Parallel Transport (Vectorized)
-#----------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------
 #
-# Uses the Rodriguez rotation formula. There is a singularity in 
+# Uses the Rodriguez rotation formula. There is a singularity in
 # this parametrization of rotation matrices, for t1 and t2 almost
 # aligned. This singularity is handled in ptransport_inner_coefficient,
-# by switching to a small-θ expansion. 
+# by switching to a small-θ expansion.
 #
 # The conditional does not affect the "true" value of the function,
 # it simply switches to a more stable method of computing the same
@@ -72,20 +67,20 @@ function ptransport(v, t1, t2)
     X = cross3(t1,t2);
     s = norm3(X);
     c = dot3(t1,t2);
-    θ = atan.(s, c)
-    ptic = ptransport_inner_coefficient.(θ)
-    c.*v + cross3(X,v) + ptic.*dot3(X,v).*X
+    ptic = ptransport_inner_coefficient.(atan.(s, c))
+    c.*v .+ cross3(X,v) .+ ptic.*dot3(X,v).*X
 end
-
 
 #----------------------------------------------------------------------------------
 # Rotate about Unit Vector (Vectorized)
 #----------------------------------------------------------------------------------
 # Again, Rodriguez rotation formula. No numerical instability.
 function rotate(v, t, θ)
-    cos.(θ).*v + sin.(θ).*cross3(t,v) + (1 .- cos.(θ)).*dot3(t,v).*v 
+    c = cos.(θ)
+    c.*v .+ sin.(θ).*cross3(t,v) .+ (1 .- c).*dot3(t,v).*v
 end
 
 function rotate!(v, t, θ)
-    v = rotate(v, t, θ) 
+    c = cos.(θ)
+    v .= c.*v .+ sin.(θ).*cross3(t,v) .+ (1 .- c).*dot3(t,v).*v
 end

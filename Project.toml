@@ -6,15 +6,13 @@ version = "0.1.0"
 [deps]
 ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
-DocumenterTools = "35a29f4d-8980-5a13-9543-d66fff28ecb8"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
-Git = "d7ba0133-e1db-5d97-8f8c-041e4b3a1eb2"
-GitCommand = "49b5b516-ca3f-4003-a081-42bdcf55082d"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"
 PyPlot = "d330b81b-6aea-500a-939a-2ce795aea3ee"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 SparseDiffTools = "47a9eef4-7e08-11e9-0b38-333d64bd3804"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
 [compat]
 julia = "1.5"

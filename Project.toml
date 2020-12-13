@@ -17,6 +17,7 @@ Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 SparseDiffTools = "47a9eef4-7e08-11e9-0b38-333d64bd3804"
 
 [compat]
+PyPlot = "2.9"
 julia = "1.5"
 
 [extras]

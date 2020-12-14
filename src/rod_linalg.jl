@@ -71,16 +71,16 @@ function ptransport(v, t1, t2)
     c.*v .+ cross3(X,v) .+ ptic.*dot3(X,v).*X
 end
 
-#----------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Rotate about Unit Vector (Vectorized)
-#----------------------------------------------------------------------------------
-# Again, Rodriguez rotation formula. No numerical instability.
-function rotate(v, t, θ)
-    c = cos.(θ)
-    c.*v .+ sin.(θ).*cross3(t,v) .+ (1 .- c).*dot3(t,v).*v
+# ------------------------------------------------------------------------------
+# Rodriguez rotation formula, specialized to the case where the vector
+# and the axis are unit length and orthogonal.
+function rotate_orthogonal_unit(v, t, θ)
+    cos.(θ).*v .+ sin.(θ).*cross3(t,v)
 end
 
-function rotate!(v, t, θ)
+function rotate_orthogonal_unit!(v, t, θ)
     c = cos.(θ)
-    v .= c.*v .+ sin.(θ).*cross3(t,v) .+ (1 .- c).*dot3(t,v).*v
+    v .= cos.(θ).*v .+ sin.(θ).*cross3(t,v)
 end

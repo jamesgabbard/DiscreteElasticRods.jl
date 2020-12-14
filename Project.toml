@@ -13,6 +13,7 @@ PyPlot = "d330b81b-6aea-500a-939a-2ce795aea3ee"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 SparseDiffTools = "47a9eef4-7e08-11e9-0b38-333d64bd3804"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+Traceur = "37b6cedf-1f77-55f8-9503-c64b63398394"
 
 [compat]
 julia = "1.5"

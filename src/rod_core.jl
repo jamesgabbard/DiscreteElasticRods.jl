@@ -3,9 +3,9 @@
 #
 # Interface for specifying a physical system composed of elastic rods
 
-#----------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------
 #  Types
-#----------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------
 
 struct basic_rod{T<:Real}
     x::Matrix{T} # 3 x ns + 2
@@ -67,10 +67,22 @@ end
 function rod_update(x0, d0, Δx, Δθ)
 
     x = x0 + Δx
-    d = ptransport(d0, tangents(x0), tangents(x))
+    t = tangents(x)
+    d = ptransport(d0, tangents(x0), t)
     rotate!(d, t, Δθ)
 
     basic_rod(x, d)
+end
+
+rod_update(r::basic_rod, Δx, Δθ) = rod_update(r.x, r.d, Δx, Δθ)
+
+function rod_update!(r::basic_rod, Δx, Δθ)
+
+    t0 = tangents(r.x)
+    r.x += Δx
+    t = tangents(r.x)
+    r.d = ptransport(r.d, t0, t)
+    rotate!(r.d, t, Δθ)
 end
 
 # Recover Strains from Abosolute Kinematics
@@ -203,12 +215,12 @@ end
 function elastic_energy(ref_strains, strains, rod_properties)
 
     # Strains, Elastic Properties, Reference Kinematis
-    l0, κ0, τ0 = ref_strains
-    l, κ, τ = strains
-    k, B, β = rod_properties
+    l0, κ0, τ0 = ref_strains.l, ref_strains.κ, ref_strains.τ
+    l, κ, τ = strains.l, strains.κ, strains.τ
+    k, B, β = rod_properties.k, rod_properties.B, rod_properties.β
 
     # Reference voronoi lengths
-    vl0 = [l0[1]; l0[2:end-1]/2] + [l0[2:end-1]/2; lo[end]]
+    vl0 = [l0[1]; l0[2:end-1]/2]' + [l0[2:end-1]/2; l0[end]]'
 
     # Energies
     Es = 1/2*sum(k./l0.*(l - l0).^2)

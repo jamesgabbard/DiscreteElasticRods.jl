@@ -17,6 +17,7 @@ Traceur = "37b6cedf-1f77-55f8-9503-c64b63398394"
 
 [compat]
 ChainRulesCore = "0.9"
+Traceur = "0.3"
 julia = "1.5"
 
 [extras]

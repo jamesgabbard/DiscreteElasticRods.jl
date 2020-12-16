@@ -1,4 +1,5 @@
 DER = DiscreteElasticRods
+using LinearAlgebra
 
 @testset "DER_linalg" begin
 
@@ -22,12 +23,16 @@ DER = DiscreteElasticRods
     ptic_θ = [(1 - cos(1.0))/sin(1.0)^2 (1 - cos(0.01))/sin(0.01)^2 0.5]
     @test ptic_θ ≈ DER.ptransport_inner_coefficient.(θ)
 
-    t1 = [1., 0., 0.]
-    t2 = [1., 1., 1.]/sqrt(3)
-    v1 = [0., 1., 1.]
-    v2 = [-2., 1., 1.]/sqrt(3)
+    s2 = sin.(θ).^2
+    c = cos.(θ)
+    @test ptic_θ ≈ DER.ptransport_inner_coefficient.(s2, c)
+
+    t1 = [1. 0. 0.]'
+    t2 = [1. 1. 1.]'/sqrt(3)
+    v1 = [0. 1. 1.]'
+    v2 = [-2. 1. 1.]'/sqrt(3)
     @test DER.ptransport(t1, t1, t2) ≈ t2
-    @test DER.ptransport(cross(t1, t2), t1, t2) ≈ cross(t1, t2)
+    @test DER.ptransport(DER.cross3(t1, t2), t1, t2) ≈ DER.cross3(t1, t2)
     @test DER.ptransport([v1 v1], [t1 t1], [t2 t2]) ≈ [v2 v2]
 
     # Rotations of orthogonal unit vectors

@@ -2,9 +2,10 @@
 
 using DiscreteElasticRods
 DER = DiscreteElasticRods
+using BenchmarkTools
 
 # Parameters
-ns = 20
+ns = 40
 E = 5e6
 ν = 0.48
 L = 0.30
@@ -26,8 +27,8 @@ m = ref_strain.l*(ρ*π*R^2)
 # q ordering: [θ2, x3, θ3, x4, ..., x, θ]
 ncore = 4*ns - 7
 q = 1:ncore + 7
-Δx = zeros(3,ns+2)
-Δθ = zeros(1,ns+1)
+#Δx = zeros(3,ns+2)
+#Δθ = zeros(1,ns+1)
 function param_2_rod!(Δx, Δθ, q)
 
     # Rearrange core DOFs
@@ -45,21 +46,63 @@ function param_2_rod!(Δx, Δθ, q)
 end
 
 function param_2_rod(q)
-    Δx = zeros(3,ns+2)
-    Δθ = zeros(1,ns+1)
+    T = eltype(q)
+    Δx = zeros(T, 3,ns+2)
+    Δθ = zeros(T, 1,ns+1)
     param_2_rod!(Δx, Δθ, q)
     Δx, Δθ
 end
 
-function rod_2_energy(Δx, Δθ)
-    r = DER.rod_update(ref_rod, Δx, Δθ)
-    strain = DER.full_kinematics(ref_rod)
-    E = (DER.elastic_energy(ref_strain, strain, props) +
-         DER.gravitational_energy(r.x, m , g))
-    E
-end
+# Incorporate Elastic Energy
+cache = zeros(27, ns)
+Δx = zeros(3,ns+2)
+Δθ = zeros(1,ns+1)
+new_rod = DER.copy(ref_rod)
+strain = DER.copy(ref_strain)
 
 function total_energy(q)
-    Δx, Δθ = param_2_rod(q)
-    rod_2_energy(Δx, Δθ)
+    param_2_rod!(Δx, Δθ, q)
+    DER.copy!(new_rod, ref_rod)
+    DER.rod_update!(new_rod, Δx, Δθ, cache)
+    DER.full_kinematics!(strain, new_rod, cache)
+    Ee = DER.elastic_energy(ref_strain, strain, props, cache)
+    Eg = DER.gravitational_energy(new_rod.x, m, g, cache)
+    Ee + Eg
 end
+
+
+immutable DiffCache{T<:AbstractArray, S<:AbstractArray}
+    du::T
+    dual_du::S
+end
+
+## DiffCache - how do?
+function DiffCache{chunk_size}(T, size, ::Type{Val{chunk_size}})
+    DiffCache(zeros(T, size...), zeros(ForwardDiff.Dual{nothing,T,chunk_size}, size...))
+end
+
+DiffCache(u::AbstractArray) = DiffCache(eltype(u),size(u),Val{ForwardDiff.pickchunksize(length(u))})
+DiffCache(u::AbstractArray, size) = DiffCache(eltype(u),size,Val{ForwardDiff.pickchunksize(length(u))})
+get_tmp{T<:ForwardDiff.Dual}(dc::DiffCache, ::Type{T}) = dc.dual_du
+get_tmp(dc::DiffCache, T) = dc.du
+
+# Let's take derivatives!
+using ForwardDiff
+using FiniteDiff
+using ReverseDiff
+
+q = rand(ncore + 7)
+grad1(q) = FiniteDiff.finite_difference_gradient(total_energy, q)
+grad2(q) = ForwardDiff.gradient(total_energy, q)
+
+const tape = ReverseDiff.GradientTape(total_energy, q)
+const compiled_tape = ReverseDiff.compile(tape)
+grad3!(res,q) = ReverseDiff.gradient!(res, compiled_tape, q)
+
+# Timings for each method
+q = rand(ncore + 7)
+res = similar(q)
+@btime total_energy(q)
+#@btime grad1(q)
+#@btime grad2(q)
+#@btime grad3!(res,q)

@@ -1,8 +1,10 @@
-# A simple quasi-static problem, based on a Newton (or Newton Krylov) method
-
+# A simple quasi-static problem, based on an L-BFGS minimization
 using DiscreteElasticRods
 DER = DiscreteElasticRods
 using BenchmarkTools
+using ForwardDiff
+using Optim
+using LineSearches
 
 # Parameters
 ns = 40
@@ -26,9 +28,9 @@ m = ref_strain.l*(ρ*π*R^2)
 
 # q ordering: [θ2, x3, θ3, x4, ..., x, θ]
 ncore = 4*ns - 7
-q = 1:ncore + 7
-#Δx = zeros(3,ns+2)
-#Δθ = zeros(1,ns+1)
+nq = ncore + 7
+q = 1:nq
+
 function param_2_rod!(Δx, Δθ, q)
 
     # Rearrange core DOFs
@@ -45,64 +47,130 @@ function param_2_rod!(Δx, Δθ, q)
 
 end
 
-function param_2_rod(q)
-    T = eltype(q)
-    Δx = zeros(T, 3,ns+2)
-    Δθ = zeros(T, 1,ns+1)
-    param_2_rod!(Δx, Δθ, q)
-    Δx, Δθ
-end
+# function param_2_rod(q)
+#     T = eltype(q)
+#     Δx = zeros(T, 3,ns+2)
+#     Δθ = zeros(T, 1,ns+1)
+#     param_2_rod!(Δx, Δθ, q)
+#     Δx, Δθ
+# end
 
-# Incorporate Elastic Energy
-cache = zeros(27, ns)
-Δx = zeros(3,ns+2)
-Δθ = zeros(1,ns+1)
-new_rod = DER.copy(ref_rod)
-strain = DER.copy(ref_strain)
+function total_energy(q::Vector{T}) where T
 
-function total_energy(q)
+    Δx, Δθ, rod, strain, cache = get_cache(T)
+
     param_2_rod!(Δx, Δθ, q)
-    DER.copy!(new_rod, ref_rod)
-    DER.rod_update!(new_rod, Δx, Δθ, cache)
-    DER.full_kinematics!(strain, new_rod, cache)
+    DER.copy!(rod, ref_rod)
+    DER.rod_update!(rod, Δx, Δθ, cache)
+    DER.full_kinematics!(strain, rod, cache)
     Ee = DER.elastic_energy(ref_strain, strain, props, cache)
-    Eg = DER.gravitational_energy(new_rod.x, m, g, cache)
+    Eg = DER.gravitational_energy(rod.x, m, g, cache)
     Ee + Eg
 end
 
+# Extensive cache system
+T = Float64
 
-immutable DiffCache{T<:AbstractArray, S<:AbstractArray}
-    du::T
-    dual_du::S
-end
+cache = zeros(T, 27, ns)
+Δx = zeros(T, 3,ns+2)
+Δθ = zeros(T, 1,ns+1)
+rod = DER.allocate_rod(T, ns)
+strain = DER.allocate_strain(T,ns)
 
-## DiffCache - how do?
-function DiffCache{chunk_size}(T, size, ::Type{Val{chunk_size}})
-    DiffCache(zeros(T, size...), zeros(ForwardDiff.Dual{nothing,T,chunk_size}, size...))
-end
+p_cache = (Δx, Δθ, rod, strain, cache)
 
-DiffCache(u::AbstractArray) = DiffCache(eltype(u),size(u),Val{ForwardDiff.pickchunksize(length(u))})
-DiffCache(u::AbstractArray, size) = DiffCache(eltype(u),size,Val{ForwardDiff.pickchunksize(length(u))})
-get_tmp{T<:ForwardDiff.Dual}(dc::DiffCache, ::Type{T}) = dc.dual_du
-get_tmp(dc::DiffCache, T) = dc.du
+chunk = ForwardDiff.pickchunksize(nq)
+#Td = ForwardDiff.Dual{nothing,T,chunk}
+Td = ForwardDiff.Dual{ForwardDiff.Tag{typeof(total_energy),T},T,chunk}
+
+cache_dual = zeros(Td, 27, ns)
+Δx_dual = zeros(Td, 3,ns+2)
+Δθ_dual = zeros(Td, 1,ns+1)
+rod_dual = DER.allocate_rod(Td, ns)
+strain_dual = DER.allocate_strain(Td,ns)
+
+d_cache = (Δx_dual, Δθ_dual, rod_dual, strain_dual, cache_dual)
+
+get_cache(::Type{T}) where T<:ForwardDiff.Dual = d_cache
+get_cache(::Type{T}) = p_cache
 
 # Let's take derivatives!
-using ForwardDiff
 using FiniteDiff
-using ReverseDiff
-
-q = rand(ncore + 7)
+# using ReverseDiff
+#
 grad1(q) = FiniteDiff.finite_difference_gradient(total_energy, q)
 grad2(q) = ForwardDiff.gradient(total_energy, q)
-
-const tape = ReverseDiff.GradientTape(total_energy, q)
-const compiled_tape = ReverseDiff.compile(tape)
-grad3!(res,q) = ReverseDiff.gradient!(res, compiled_tape, q)
+#
+# tape1 = ReverseDiff.GradientTape(total_energy, q)
+# compiled_tape1 = ReverseDiff.compile(tape1)
+# grad3!(res,q) = ReverseDiff.gradient!(res, compiled_tape1, q)
 
 # Timings for each method
-q = rand(ncore + 7)
-res = similar(q)
-@btime total_energy(q)
+#q = rand(nq)
+#res = similar(q)
+#@btime total_energy(q)
 #@btime grad1(q)
 #@btime grad2(q)
 #@btime grad3!(res,q)
+
+
+# Optimization
+f(x) = total_energy(x)
+
+function g!(G,x)
+    ForwardDiff.gradient!(G,total_energy,x)
+end
+
+method = Optim.BFGS(; alphaguess = LineSearches.InitialStatic(),
+                linesearch = LineSearches.HagerZhang(),
+                initial_invH = nothing,
+                initial_stepnorm = nothing,
+                manifold = Flat())
+
+#q0 = zeros(nq)
+q0 = 0.0001*rand(nq)
+ops = Optim.Options(; g_tol = 1e-2,
+                      time_limit = 60,
+                      show_trace = true)
+results = Optim.optimize(f, g!, q0, method, ops)
+qf = Optim.minimizer(results)
+
+# Visuals?
+function reconstruct(q)
+    Δx, Δθ, rod, strain, cache = p_cache
+
+    param_2_rod!(Δx, Δθ, q)
+    DER.copy!(rod, ref_rod)
+    DER.rod_update!(rod, Δx, Δθ, cache)
+
+    DER.plot(rod)
+    ax = PyPlot.gca()
+    ax.set_ylim(-L/2, L/2)
+    ax.set_zlim(-L/2, L/2)
+
+    rod
+end
+
+reconstruct(qf)
+
+
+# Get optim to work
+ftst(x) = 1/2*sum(abs2, x)
+
+function gtst!(G,x)
+    ForwardDiff.gradient!(G,ftst,x)
+end
+
+# function gtst!(r,x)
+#     r .= -x
+# end
+x0 = rand(5)
+
+ftst(x0)
+tmp = zeros(5)
+gtst!(tmp, x0)
+
+results = Optim.optimize(ftst, gtst!, x0, LBFGS(), ops)
+
+rosenbrock(x) =  (1.0 - x[1])^2 + 100.0 * (x[2] - x[1]^2)^2
+result = optimize(rosenbrock, zeros(2), BFGS(), ops)

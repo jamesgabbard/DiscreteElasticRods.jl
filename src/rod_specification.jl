@@ -109,29 +109,46 @@ function discrete_rod(xfun::Function, dfun::Function, s, N::Int)
     for i in 1:N+1; d[:,i] = dfun(se[i]); end
 
     # Project and normalize directors
-    t = x[:,2:end] - x[:,1:end-1]
-    t = t./norm3(t)
+    t = tangents(x)
     d = d .- dot3(d,t).*t
     d = d./norm3(d)
 
     basic_rod(x,d)
  end
 
-"""
-    elliptical_stiffness(E, ν, a, b)
+ """
+     elliptical_stiffness(E, ν, a, b)
 
-Return the elastic properties of a rod with elliptical section.
+ Return the elastic properties of a rod with elliptical section.
 
-# Arguments
-- `E`: Elastic Modulus
-- `ν`: Poisson Ratio
-- `a`, `b`: Radii of the cross section
-"""
-function elliptical_stiffness(E, ν, a, b)
-    G = E/(2*(1 + ν))
-    A = π*a*b
-    k = E*A
-    B = E*A/4*[a^2, b^2]
-    β = G*A*(a^2 + b^2)/4
-    scalar_rod_properties(k, B, β)
-end
+ # Arguments
+ - `E`: Elastic Modulus
+ - `ν`: Poisson Ratio
+ - `a`, `b`: Radii of the cross section
+ """
+ function elliptical_stiffness(E, ν, a, b)
+     G = E/(2*(1 + ν))
+     A = π*a*b
+     k = E*A
+     B = E*A/4*[a^2, b^2]
+     β = G*A*(a^2 + b^2)/4
+     scalar_rod_properties(k, B, β)
+ end
+
+ """
+     random_rod(ns)
+
+ Return an admissible rod with ns segments. Centerline and directors are random.
+
+ """
+ function random_rod(ns::Int)
+
+     x = randn(3, ns+2)
+     d = randn(3, ns+1)
+
+     t = tangents(x)
+     d = d .- dot3(d,t).*t
+     norm3!(d)
+
+     basic_rod(x,d)
+  end

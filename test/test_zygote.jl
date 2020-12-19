@@ -2,12 +2,6 @@ using DiscreteElasticRods
 DER = DiscreteElasticRods
 using Zygote
 
-# Pullbacks through constructors
-using Zygote:@adjoint
-@adjoint DER.basic_rod(x, d) = DER.basic_rod(x, d), dr -> (dr.x, dr.d)
-@adjoint DER.rod_delta(Δx, Δθ) = DER.rod_delta(Δx, Δθ), dΔr -> (dΔr.Δx, dΔr.Δθ)
-@adjoint DER.rod_strains(l, κ, τ) = DER.rod_strains(l, κ, τ), ds -> (ds.l, ds.κ, ds.τ)
-
 # Basic linalg
 n = 40
 a = randn(3,n)

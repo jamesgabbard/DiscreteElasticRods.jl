@@ -152,3 +152,96 @@ function discrete_rod(xfun::Function, dfun::Function, s, N::Int)
 
      basic_rod(x,d)
   end
+
+# ------------------------------------------------------------------------------
+# Specification Layer Stuff
+# ------------------------------------------------------------------------------
+
+using LinearAlgebra
+import Base.length
+
+abstract type rod_bc end
+
+struct free_bc <: rod_bc
+    rod_num::Int
+    rod_end::Int
+end
+
+struct static_clamp_bc <: rod_bc
+    rod_num::Int
+    rod_end::Int
+end
+
+num_free_parameters(bc::free_bc) = 7
+num_free_parameters(bc::static_clamp_bc) = 0
+
+# How to apply the BCs
+function apply_bc(T::Type, bc::free_bc, params)
+    return hcat(params[1:3], params[5:7]), params[4]
+end
+
+function apply_bc(T::Type, bc::static_clamp_bc, params)
+    return zeros(T,3,2), zero(T)
+end
+
+# Compile unknowns and specification layer
+function get_specification_layer(rods::Vector{Int}, bcs::Vector{rod_bc})
+
+    # Define size of input vector
+    nq = sum((4 .*rods.-7)) + sum(num_free_parameters, bcs)
+
+    # Define a function mapping q to rod_deltas
+    function param_2_rod(q::Vector{T}) where T
+
+        # Distribute core degrees of freedom
+        Δx_cores = Vector{Matrix{T}}()
+        Δθ_cores = Vector{Matrix{T}}()
+        index = 0
+        for ns in rods
+            ncore = 4*ns-7
+            s_ind = index
+            e_ind = index + ncore
+            push!(Δx_cores, vcat(reshape(q[s_ind+2:4:e_ind], 1, ns-2),
+                                 reshape(q[s_ind+3:4:e_ind], 1, ns-2),
+                                 reshape(q[s_ind+4:4:e_ind], 1, ns-2)))
+            push!(Δθ_cores, reshape(q[s_ind+1:4:e_ind], 1, ns-1))
+            index += ncore
+        end
+
+        # Work on boundary degrees of freedom
+        Δx_start = Vector{Matrix{T}}(undef, length(rods))
+        Δθ_start = Vector{Vector{T}}(undef, length(rods))
+        Δx_end = Vector{Matrix{T}}(undef, length(rods))
+        Δθ_end = Vector{Vector{T}}(undef, length(rods))
+
+        for bc in bcs
+            nparams = num_free_parameters(bc)
+            s_ind = index + 1
+            e_ind = index + nparams
+            Δx , Δθ = apply_bc(T, bc, q[s_ind:e_ind])
+            if (bc.rod_end == 0)
+                Δx_start[bc.rod_num] = Δx
+                Δθ_start[bc.rod_num] = [Δθ]
+            else
+                Δx_end[bc.rod_num] = Δx
+                Δθ_end[bc.rod_num] = [Δθ]
+            end
+            index += nparams
+        end
+
+        # Concatenate everything
+        #deltas = rod_delta(hcat(Δx_start[1], Δx_cores[1], Δx_end[1]), hcat(Δθ_start[1], Δθ_cores[1], Δθ_end[1]))
+        deltas = rod_delta(zeros(T,3,4), zeros(T,3,4))
+                  #rod_delta(hcat(Δx_start[2], Δx_cores[2], Δx_end[2]), hcat(Δθ_start[2], Δθ_cores[2], Δθ_end[2]))]
+        deltas
+
+        #[rod_delta(hcat(Δx_start[i], Δx_cores[i], Δx_end[i]), hcat(Δθ_start[i], Δθ_cores[i], Δθ_end[i])) for i in 1:2]
+    end
+
+    return nq, param_2_rod
+end
+
+using Zygote:@adjoint
+@adjoint basic_rod(x, d) = basic_rod(x, d), dr -> (dr.x, dr.d)
+@adjoint rod_delta(Δx, Δθ) = rod_delta(Δx, Δθ), dr -> (dr.Δx, dr.Δθ)
+@adjoint rod_strains(l, κ, τ) = rod_strains(l, κ, τ), ds -> (ds.l, ds.κ, ds.τ)

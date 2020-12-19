@@ -1,9 +1,14 @@
 
-function forces(x, d1), (vl0, k0, B, beta)
+function forces(rod::basic_rod, rod_props::rod_properties, ref_strains::rod_strain)
+
+    # unpack
+    l0, κ0, τ0 =  ref_strains.l0, ref_strains.κ0, ref_strains.τ0
+    k, B, β = rod_props.k, rod_props.B, rod_props.β
+    x, d1 = rod.x, rod.d1
 
     # Tangents and directors
     nv = size(x,2)
-    e =x[:, 2:nv] .- x[:, 1:nv-1]
+    e = x[:, 2:nv] .- x[:, 1:nv-1]
     l = norm3(e)
     t = e./l
     d2 = cross3(t, d1)
@@ -26,9 +31,9 @@ function forces(x, d1), (vl0, k0, B, beta)
     d1tild = 2 .*d1v./chi
     d2tild = 2 .*d2v./chi
 
-    k = 2 .*cross3(t1, t2)./chi
-    κ1 =  dot3(k, d2v)
-    κ2 = -dot3(k, d1v)
+    kb = 2 .*cross3(t1, t2)./chi
+    κ1 =  dot3(kb, d2v)
+    κ2 = -dot3(kb, d1v)
     κ = vcat(κ1, κ2)
 
     # Curvature Derivatives
@@ -44,41 +49,23 @@ function forces(x, d1), (vl0, k0, B, beta)
     sinτ = dot3(d1_transport, d2r)
     τ = atan.(sinτ, cosτ)
 
-
-
     # Twist Derivatives
-    dτde1 = k./(2 .*l1);
-    dτde2 = k./(2 .*l2);
+    dτde1 = kb./(2 .*l1);
+    dτde2 = kb./(2 .*l2);
 
     # Derivative wrt edge i-1
-    dEbde1 = ([dκ1de1; dκ2de1]' * B * ([κ1; κ2] - k0(i-1,:)') +
+    dEbde1 = ([dκ1de1; dκ2de1]' * B * ([κ1; κ2] - k0(i-1,:)')
+    dEbde2 = ([dκ1de2; dκ2de2]' * B * ([κ1; κ2] - k0(i-1,:)')
 
     dEtde1 = β.*τ.*dτde1./vl0;
     dEtde2 = β.*τ.*dτde2./vl0;
 
     # Derivative wrt edge i
-    de2 = ([dκ1de2; dκ2de2]' * B * ([κ1; κ2] - k0(i-1,:)') + beta*m*dmde2')./vl0;
-
-
     F(i-1,:) = F(i-1,:) + de1';
     F(i,:) = F(i,:) - de1' + de2';
     F(i+1,:) = F(i+1,:) - de2';
 
+    # Add the moment code
+
+
 end
-
-
-J = [0 -1; 1 0];
-
-% Curvature Vector in Material Frame
-
-
-% Twist Derivatives
-gradTwist = β.*([0; τ./vl0] - [τ./vl0; 0])
-
-% Bending Derivatives
-rhs = (J*B*(κ-κ0)')';
-gradBend = [0.5*dot(omegaLeft./vl0, rhs, 2); 0] + ...
-           [0; 0.5*dot(omegaRight./vl0, rhs, 2)];
-
-% Moments (aka the negative Gradient of Elastic energy wrt Thetas)
-moment = -(gradTwist + gradBend);

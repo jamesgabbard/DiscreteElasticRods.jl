@@ -130,15 +130,13 @@ function rod_update!(x, d, Δx, Δθ, cacheraw)
     tangents!(t0, x)
     x .+= Δx
     tangents!(t, x)
-    d0 .= r.d
+    d0 .= d
     ptransport_cache!(d, d0, t0, t, cache_pt)
-    rotate_orthogonal_unit!(d, t, Δθ) #TODO: cache this
+    rotate_orthogonal_unit!(d, t, Δθ, cache) #TODO: cache this
 end
 
 # cache is 27 rows, nv-2 columns
 function full_kinematics!(l, κ, τ, x, d1, cache)
-
-    x, d1 = r.x, r.d1
 
     # Tangents, lengths
     nv = size(x,2)

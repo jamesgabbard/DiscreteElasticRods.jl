@@ -54,6 +54,12 @@ function allocate_strain(T::Type, ns::Int)
     rod_strains(l, κ, τ)
 end
 
+function allocate_delta(T::Type, ns::Int)
+    Δx = Matrix{T}(undef, 3, ns+2)
+    Δθ = Matrix{T}(undef, 3, ns+1)
+    return rod_delta(Δx, Δθ)
+end
+
 # ----------------------------------------------------------------------------------
 #  Elastic Energy Computation
 # ----------------------------------------------------------------------------------

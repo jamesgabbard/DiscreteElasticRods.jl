@@ -4,17 +4,35 @@ using Zygote
 using ForwardDiff
 using FiniteDiff
 using ReverseDiff
+using BenchmarkTools
+using IterativeSolvers
+using SparseDiffTools
+using DelimitedFiles
 
-# Rod size
-n = 10
+struct AHesVec{F,uType}
+    f::F
+    u::uType
+end
 
-# Pullbacks through constructors
-using Zygote:@adjoint
-@adjoint DER.basic_rod(x, d) = DER.basic_rod(x, d), dr -> (dr.x, dr.d)
-@adjoint DER.rod_delta(Δx, Δθ) = DER.rod_delta(Δx, Δθ), dΔr -> (dΔr.Δx, dΔr.Δθ)
-@adjoint DER.rod_strains(l, κ, τ) = DER.rod_strains(l, κ, τ), ds -> (ds.l, ds.κ, ds.τ)
+Base.size(L::AHesVec) = (length(L.u),length(L.u))
+Base.size(L::AHesVec,i::Int) = length(L.u)
+Base.:*(L::AHesVec,x::AbstractVector) =  SparseDiffTools.autoback_hesvec(L.f, L.u, x)
 
-# Setup an energy functional
+import LinearAlgebra
+function LinearAlgebra.mul!(du::AbstractVector,L::AHesVec,v::AbstractVector)
+    du .= L*v
+end
+
+# Rod sizes
+n_array = [10, 20, 30, 40, 50]
+grad_array = zeros(3, length(n_array))
+hess_array = zeros(5, length(n_array))
+minres_array = zeros(2, length(n_array))
+
+#for k = 1:length(n_array)
+k = 4
+    # Setup an energy functional
+n = n_array[k]
 ref_rod = DER.random_rod(n)
 ref_strains = DER.full_kinematics(ref_rod)
 rod_props = DER.elliptical_stiffness(10, 0.3, 0.01, 0.04)
@@ -40,39 +58,63 @@ end
 
 nq = 4*n+7
 q = rand(nq)
-tape = ReverseDiff.GradientTape(total_energy_array, q)
-compiled_tape = ReverseDiff.compile(tape)
-grad_reverse!(out, q) = ReverseDiff.gradient!(out, compiled_tape, q)
-grad_forward(q) = ForwardDiff.gradient(total_energy, q)
-grad_zygote(q) = Zygote.gradient(total_energy, q)
+# tape = ReverseDiff.GradientTape(total_energy_array, q)
+# compiled_tape = ReverseDiff.compile(tape)
+#
+# grad_reverse!(out, q) = ReverseDiff.gradient!(out, compiled_tape, q)
+# grad_forward(q) = ForwardDiff.gradient(total_energy, q)
+# grad_zygote(q) = first(Zygote.gradient(total_energy, q))
+#
+# # Timing the Gradients
+# out = similar(q)
+# grad_reverse!(out,q)
+# grad_forward(q)
+# grad_zygote(q)
+# rbench = @benchmark grad_reverse!($out, $q)
+# fbench = @benchmark grad_forward($q)
+# zbench = @benchmark grad_zygote($q)
+#
+# grad_array[1,k] = minimum(fbench).time/1e9
+# grad_array[2,k] = minimum(rbench).time/1e9
+# grad_array[3,k] = minimum(zbench).time/1e9
 
-# Timing the Gradients
-using BenchmarkToolss
-out = similar(q)
-@btime grad_reverse!(out, q)
-@btime grad_forward(q)
-@btime grad_zygote(q)
+# q = zeros(nq)
+# v = rand(nq)
+# nh = @benchmark num_hesvec(total_energy, $q, $v)
+# nah = @benchmark numauto_hesvec(total_energy, $q, $v)
+# anh = @benchmark autonum_hesvec(total_energy, $q, $v)
+# nbh = @benchmark numback_hesvec(total_energy, $q, $v)
+# abh = @benchmark autoback_hesvec(total_energy, $q, $v)
+#
+# hess_array[1,k] = minimum(nh).time/1e9
+# hess_array[2,k] = minimum(nah).time/1e9
+# hess_array[3,k] = minimum(anh).time/1e9
+# hess_array[4,k] = minimum(nbh).time/1e9
+# hess_array[5,k] = minimum(abh).time/1e9
 
+writedlm("hessian_timing.txt", hess_array, ',')
+
+grd = rand(nq)
+
+Hvec1 = HesVec(total_energy_array, q; autodiff=true)
+out = zeros(length(q))
+mna = @benchmark minres!($out, $Hvec1, $grd)
+
+AHVec = AHesVec(total_energy, q)
+out = zeros(length(q))
+mab = @benchmark minres!($out, $AHVec, $grd)
+
+minres_array[1,k] = minimum(mna).time/1e9
+minres_array[2,k] = minimum(mab).time/1e9
+writedlm("minres_timing.txt", minres_array, ',')
+
+print("Benchmarked n = $n\n")
+#end
+
+writedlm("gradient_timing.txt", grad_array, ',')
+writedlm("hessian_timing.txt", hess_array, ',')
+writedlm("minres_timing.txt", minres_array, ',')
 
 # ------------------------------------------------------------------------------
-# Hessian Timing
+# Minres Timing
 # ------------------------------------------------------------------------------
-using SparseDiffTools
-using SparsityDetection: hessian_sparsity, jacobian_sparsity
-
-input = similar(q)
-output = similar(q)
-
-function grad_forward!(output, input)
-    output .= grad_forward(input)
-end
-
-function grad_zygote!(output, input)
-    output .= grad_zygote(input)
-end
-
-#hessian_pattern2 = jacobian_sparsity(grad_forward!, output, input; verbose = true)
-#hessian_prototype = Float64.(hessian_pattern)
-using BandedMatrices: BandedMatrix
-hessian_prototype = BandedMatrix{Float64}(Ones(nq, nq), (10, 10))
-colors = SparseDiffTools.matrix_colors(hessian_prototype)

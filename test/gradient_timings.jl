@@ -30,7 +30,7 @@ hess_array = zeros(5, length(n_array))
 minres_array = zeros(2, length(n_array))
 
 #for k = 1:length(n_array)
-k = 4
+k = 1
     # Setup an energy functional
 n = n_array[k]
 ref_rod = DER.random_rod(n)
@@ -92,7 +92,7 @@ q = rand(nq)
 # hess_array[4,k] = minimum(nbh).time/1e9
 # hess_array[5,k] = minimum(abh).time/1e9
 
-writedlm("hessian_timing.txt", hess_array, ',')
+#writedlm("hessian_timing.txt", hess_array, ',')
 
 grd = rand(nq)
 

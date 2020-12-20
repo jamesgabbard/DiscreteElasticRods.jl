@@ -70,23 +70,43 @@ end
     @test ta ≈ c
 
     # Parallel transport inner coeff: TBD!
+    θ = [1.0 0.01 0.0]
+    ptic_θ = [(1 - cos(1.0))/sin(1.0)^2 (1 - cos(0.01))/sin(0.01)^2 0.5]
+
+    s2 = sin.(θ).^2
+    c = cos.(θ)
+    out = similar(θ)
+    DER.ptransport_inner_coefficient!(out, s2, c)
+    @test ptic_θ ≈ out
+
     # Parallel transport
-    # t1 = [1. 0. 0.]'
-    # t2 = [1. 1. 1.]'/sqrt(3)
-    # v1 = [0. 1. 1.]'
-    # v2 = [-2. 1. 1.]'/sqrt(3)
-    # @test DER.ptransport(t1, t1, t2) ≈ t2
-    # @test DER.ptransport(DER.cross3(t1, t2), t1, t2) ≈ DER.cross3(t1, t2)
-    # @test DER.ptransport([v1 v1], [t1 t1], [t2 t2]) ≈ [v2 v2]
-    #
-    # # Rotations of orthogonal unit vectors
-    # v1 = [[0., 1., 0.,] [0., 0., 1.,]]
-    # v2 = [[0., 1., 1.,] [0., -1., 1.,]]/sqrt(2)
-    # θ = π/4
-    # t = [1., 0., 0.]
-    # @test DER.rotate_orthogonal_unit(v1, [t t], [θ θ]) ≈ v2
-    # DER.rotate_orthogonal_unit!(v1, [t t], [θ θ])
-    # @test v1 ≈ v2
+    t1 = [1. 0. 0.]'
+    t2 = [1. 1. 1.]'/sqrt(3)
+    v1 = [0. 1. 1.]'
+    v2 = [-2. 1. 1.]'/sqrt(3)
+    cache = zeros(9, 1)
+
+    val = similar(t1)
+    DER.ptransport!(val, t1, t1, t2, cache)
+    @test val ≈ t2
+
+    DER.ptransport!(val, DER.cross3(t1, t2), t1, t2, cache)
+    @test val ≈ DER.cross3(t1, t2)
+
+    cache = zeros(9, 2)
+    val = [v1 v1]
+    DER.ptransport!(val, [v1 v1], [t1 t1], [t2 t2], cache)
+    @test val ≈ [v2 v2]
+
+    # Rotations of orthogonal unit vectors
+    v1 = [[0., 1., 0.,] [0., 0., 1.,]]
+    v2 = [[0., 1., 1.,] [0., -1., 1.,]]/sqrt(2)
+    θ = π/4
+    t = [1., 0., 0.]
+
+    cache = zeros(5,2)
+    DER.rotate_orthogonal_unit!(v1, [t t], [θ θ], cache)
+    @test  v1 ≈ v2
 
 end
 

@@ -31,7 +31,9 @@ end
 PTRANSPORT_TOL = 0.06
 
 function ptransport_inner_coefficient(s2,c)
-    s2 > PTRANSPORT_TOL^2 ? (1-c)/s2 : 1/2 + (1-c)/4 + (1-c)^2/8*(1 + s2/4)
+    opt1 = (1-c)/s2
+    opt2 = 1/2 + (1-c)/4 + (1-c)^2/8*(1 + s2/4)
+    s2 > PTRANSPORT_TOL^2 ?  opt1 : opt2
 end
 
 function ptransport(v, t1, t2)

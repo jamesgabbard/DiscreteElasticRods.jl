@@ -57,16 +57,21 @@ end
 # it simply switches to a more stable method of computing the same
 # quantity. Consequently, it is hidden from reverse-mode AD by defining
 # a custom pullback for the function 'ptransport_inner_coefficient'
-#
-# There is some inneficiency in re-computing sin(θ) and cos(θ) in this function,
-# but I'm not into the micro-optimization at the moment!
 
-function ptransport_inner_coefficient!(out,s2,c)
-    out = s2 > PTRANSPORT_TOL^2 ? (1-c)/s2 : 1/2 + (1-c)/4 + (1-c)^2/8*(1 + s2/4)
+const PTRANSPORT_TOL2 = PTRANSPORT_TOL^2
+function ptransport_inner_coefficient!(out, s2, c)
+    out .= 1/2 .+ (1 .- c)./4 .+ (1 .- c).^2 .*(1 .+ s2./4)./8
+    @inbounds for i = 1:length(out)
+        if s2[i] > PTRANSPORT_TOL2 #ind[i]
+            out[i] = (1 - c[i])/s2[i]
+        end
+    end
 end
 
+#out = s2 > PTRANSPORT_TOL^2 ? (1-c)/s2 : 1/2 + (1-c)/4 + (1-c)^2/8*(1 + s2/4)
+
 # Cache needs to be 9 x ne
-function ptransport_cache!(v2, v1, t1, t2, cache)
+function ptransport!(v2, v1, t1, t2, cache)
     X = view(cache, 1:3, :)
     tmp = view(cache, 4:6, :)
     s2 = view(cache, 7:7, :)

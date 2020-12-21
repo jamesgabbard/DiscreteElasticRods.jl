@@ -3,40 +3,40 @@
 # fall back to a less efficient version where needed
 
 function cross3!(c,a,b)
-    a1 = @view a[1,:]
-    a2 = @view a[2,:]
-    a3 = @view a[3,:]
-
-    b1 = @view b[1,:]
-    b2 = @view b[2,:]
-    b3 = @view b[3,:]
-
-    c[1,:] .= @. a2*b3 - a3*b2
-    c[2,:] .= @. a3*b1 - a1*b3
-    c[3,:] .= @. a1*b2 - a2*b1
+    @inbounds for i = 1:size(c,2)
+        c[1,i] = a[2,i]*b[3,i] - a[3,i]*b[2,i]
+        c[2,i] = a[3,i]*b[1,i] - a[1,i]*b[3,i]
+        c[3,i] = a[1,i]*b[2,i] - a[2,i]*b[1,i]
+    end
 end
 
 function dot3!(c,a,b)
-    sum!(c, a.*b)
-end
-
-function dot3!(c,a,b,cache)
-    cache .= a.*b
-    sum!(c, cache)
+    @inbounds for i = 1:length(c)
+        c[i] = a[1,i]*b[1,i] + a[2,i]*b[2,i] + a[3,i]*b[3,i]
+    end
 end
 
 function norm3!(a)
-    a ./= sqrt.(sum(abs2, a, dims=1))
+    @inbounds for i = 1:size(a,2)
+        tmp = sqrt(a[1,i]*a[1,i] + a[2,i]*a[2,i] + a[3,i]*a[3,i])
+        a[1,i] /= tmp
+        a[2,i] /= tmp
+        a[3,i] /= tmp
+    end
 end
 
-function norm3!(out,a)
-    out .= sqrt.(sum(abs2, a, dims=1))
+function norm3!(out, a)
+    @inbounds for i = 1:length(out)
+        out[i] = sqrt(a[1,i]*a[1,i] + a[2,i]*a[2,i] + a[3,i]*a[3,i])
+    end
 end
 
 function edges!(e, x)
-    x1 = @view x[:,2:end]
-    x2 = @view x[:,1:end-1]
-    e .= x1 .- x2
+    @inbounds for i = 1:size(e,2)
+        e[1,i] = x[1,i+1] - x[1,i]
+        e[2,i] = x[2,i+1] - x[2,i]
+        e[3,i] = x[3,i+1] - x[3,i]
+    end
 end
 
 function tangents!(t, x)
@@ -70,22 +70,20 @@ end
 
 #out = s2 > PTRANSPORT_TOL^2 ? (1-c)/s2 : 1/2 + (1-c)/4 + (1-c)^2/8*(1 + s2/4)
 
-# Cache needs to be 9 x ne
+# Cache needs to be 6 x ne
 function ptransport!(v2, v1, t1, t2, cache)
     X = view(cache, 1:3, :)
-    tmp = view(cache, 4:6, :)
-    s2 = view(cache, 7:7, :)
-    c = view(cache, 8:8, :)
-    ptic = view(cache, 9:9, :)
+    s2 = view(cache, 4:4, :)
+    c = view(cache, 5:5, :)
+    ptic = view(cache, 6:6, :)
 
     cross3!(X, t1, t2)
-    dot3!(s2, X, X, tmp)
-    dot3!(c, t1, t2, tmp)
-    ptransport_inner_coefficient!.(ptic,s2,c)
+    dot3!(s2, X, X)
+    dot3!(c, t1, t2)
+    ptransport_inner_coefficient!(ptic,s2,c)
 
-    # s2, c, no longer useful. Overwriting with new temporary
-    dXv = view(cache, 7:7, :)
-    dot3!(dXv,X,v1,tmp)
+    dXv = view(cache, 4:4, :) # Overwrites s2
+    dot3!(dXv,X,v1)
     cross3!(v2,X,v1)
     v2 .+= c.*v1 .+ ptic.*dXv.*X
 end
@@ -112,109 +110,106 @@ function rotate_orthogonal_unit!(v, t, θ, cache)
 end
 
 # Update kinematics given displacement and twist
-# Also TODO: get rid of this
-function rod_update!(r::basic_rod, Δr::rod_delta)
-
-    t0 = tangents(r.x)
-    r.x .+= Δr.Δx
-    t = tangents(r.x)
-    r.d .= ptransport(r.d, t0, t)
-    rotate_orthogonal_unit!(r.d, t, Δr.Δθ)
-end
-
-function rod_update!(x, d, Δx, Δθ, cacheraw)
+function rod_update!(x, d, Δx, Δθ, cache)
     ne = length(Δθ)
-    cache = reshape(view(cacheraw, 1:18*ne), 18, ne)
+    # cache = reshape(view(cacheraw, 1:15*ne), 15, ne)
+    # t0 = view(cache, 1:3, :)
+    # t = view(cache, 4:6, :)
+    # d0 = view(cache, 7:9, :)
+    # cache_pt = view(cache, 10:15, :)
+    # cache_rt = view(cache, 10:14, :)
 
-    t0 = view(cache, 1:3, :)
-    t = view(cache, 4:6, :)
-    d0 = view(cache, 7:9, :)
-    cache_pt = view(cache, 10:18, :)
-    cache_rt = view(cache, 10:14, :)
+    t0 = reshape(view(cache, 1:3*ne), 3, ne)
+    t = reshape(view(cache, 3*ne+1:6*ne), 3, ne)
+    d0 = reshape(view(cache, 6*ne+1:9*ne), 3, ne)
+    cache_pt = reshape(view(cache, 9*ne+1:15*ne), 6, ne)
 
     tangents!(t0, x)
     x .+= Δx
     tangents!(t, x)
+
     d0 .= d
-    ptransport_cache!(d, d0, t0, t, cache_pt)
-    rotate_orthogonal_unit!(d, t, Δθ, cache) #TODO: cache this
+    ptransport!(d, d0, t0, t, cache_pt)
+    rotate_orthogonal_unit!(d, t, Δθ, cache_pt)
 end
 
-# cache is 27 rows, nv-2 columns
-function full_kinematics!(l, κ, τ, x, d1, cache)
+# caches is (6 x nv-1, 9 x nv-2)
+function full_kinematics!(l, κ, τ, x, d1, caches)
 
-    # Tangents, lengths
-    nv = size(x,2)
-    t = edges(x)
-    norm3!(l,t)
+    # Unpack and divy up caches
+    cache1, cache2 = caches
+    t = view(cache1, 1:3, :)
+    d2 = view(cache1, 4:6, :)
+    k = view(cache2, 1:3, :)
+    tmp1 = view(cache2, 4:4, :)
+    tmp3 = view(cache2, 4:6, :)
+    pt_cache = view(cache2, 1:6, :) # overrides k, tmp
+    d1trans = view(cache2, 7:9, :)
+    cosτ = view(cache2, 1:1, :)
+    sinτ = view(cache2, 2:2, :)
+
+    # Lengths
+    edges!(t, x)
+    norm3!(l, t)
     t ./= l
-    d2 = cross3(t, d1)
+    cross3!(d2, t, d1)
 
-    # Caches
-    t1 = view(cache, 1:3, :)
-    t2 = view(cache, 4:6, :)
-    d1l = view(cache, 7:9, :)
-    d1r = view(cache, 10:12, :)
-    d2l = view(cache, 13:15, :)
-    d2r = view(cache, 16:18, :)
-    tmp = view(cache, 19:21, :)
-    k = view(cache, 22:24, :)
-
-    t1 .= view(t, :, 1:nv-2)
-    t2 .= view(t, :, 2:nv-1)
-    d1l .= view(d1,:,1:nv-2)
-    d1r .= view(d1,:,2:nv-1)
-    d2l .= view(d2,:,1:nv-2)
-    d2r .= view(d2,:,2:nv-1)
+    # Break tangents and directors into sets
+    nv = size(x,2)
+    t1 = view(t,:,1:nv-2)
+    t2 = view(t,:,2:nv-1)
+    d1l = view(d1,:,1:nv-2)
+    d1r = view(d1,:,2:nv-1)
+    d2l = view(d2,:,1:nv-2)
+    d2r = view(d2,:,2:nv-1)
 
     # Curvature
     cross3!(k, t1, t2)
-    k .*= 2.0./(1.0 .+ dot3(t1, t2))
-    tmp .= k.*(d2l .+ d2r)./2
-    sum!(view(κ, 1:1, :), tmp)
-    tmp .= -k.*(d1l .+ d1r)./2
-    sum!(view(κ, 2:2, :), tmp)
+    dot3!(tmp1, t1, t2)
+    k .*= 2.0./(1.0 .+ tmp1)
+    tmp3 .= k.*(d2l .+ d2r)./2
+    sum!(view(κ, 1:1, :), tmp3)
+    tmp3 .= -1.0.*k.*(d1l .+ d1r)./2
+    sum!(view(κ, 2:2, :), tmp3)
 
-    # Twists (could move in part of ptransport to reduce intermediates)
-    pt_cache = view(cache, 19:27, :) # overrides k, tmp
-    d1_transport = view(cache, 13:15, :) # overrides d2l
-    ptransport_cache!(d1_transport, d1l, t1, t2, pt_cache)
-
-    cosτ = view(cache, 19:19, :)
-    sinτ = view(cache, 20:20, :)
-
-    dot3!(cosτ, d1r, d1_transport, tmp)
-    dot3!(sinτ, d2r, d1_transport, tmp)
+    # # Twists (could move in part of ptransport to reduce intermediates)
+    ptransport!(d1trans, d1l, t1, t2, pt_cache)
+    dot3!(cosτ, d1r, d1trans)
+    dot3!(sinτ, d2r, d1trans)
     τ .= atan.(sinτ, cosτ)
 end
 
-# cache length at least 3*nv
+# cache (3 x nv-2)
 function elastic_energy(l0,κ0,τ0, l,κ,τ, k,B,β, cache)
 
     ne = length(l)
     nv = ne - 1
 
-    # Reference voronoi lengths
-    vl0 = reshape(view(cache, (2*nv+1):3*nv), 1, nv)
-    vl0[1] = l0[1] + l0[2]/2
-    vl0[2:nv-1] .= (view(l0, 2:ne-2) .+ view(l0, 3:ne-1))/2
-    vl0[nv] = l0[ne-1]/2 + l0[ne]
-
-    # vl0 .= [l0[1]; l0[2:end-1]/2]' + [l0[2:end-1]/2; l0[end]]'
     cache_s = reshape(view(cache, 1:ne), 1, ne)
-    cache_t = reshape(view(cache, 1:nv), 1, nv)
-    cache_b = reshape(view(cache, 1:2*nv), 2, nv)
-
     cache_s .= k./l0.*(l .- l0).^2
     Es = 1/2*sum(cache_s)
+
+    # Reference voronoi lengths
+    l0l = view(l0, 2:ne-2)
+    l0r = view(l0, 3:ne-1)
+
+    vl0 = view(cache, 1:1, :)
+    vl0[1] = l0[1] + l0[2]/2
+    vl0[2:nv-1] .= (l0l .+ l0r)./2
+    vl0[nv] = l0[ne-1]/2 + l0[ne]
+
+    cache_t = view(cache, 2:2, :)
     cache_t .= β./vl0.*(τ .- τ0).^2
     Et = 1/2*sum(cache_t)
+
+    cache_b = view(cache, 2:3, :)
     cache_b .= B./vl0.*(κ .- κ0).^2
     Eb = 1/2*sum(cache_b)
 
     Es + Et + Eb
 end
 
+# cache is at least 1xne
 function gravitational_energy(x, m, g, cache)
     nv = size(x,2)
     tmp = reshape(view(cache, 1:nv-1), 1, nv-1)

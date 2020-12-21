@@ -49,23 +49,26 @@ for k = 1:length(n_array)
     end
 
     T = Float64
-    cache = zeros(T, 27, ns)
+    cache1 = zeros(T, 6, ns+1)
+    cache2 = zeros(T, 24, ns)
     Δx = zeros(T, 3,ns+2)
     Δθ = zeros(T, 1,ns+1)
     rod = DER.allocate_rod(T, ns)
     strain = DER.allocate_strain(T,ns)
-    p_cache = (Δx, Δθ, rod, strain, cache)
+    caches = (zeros(6, ns+1), zeros(9, ns))
+    p_cache = (Δx, Δθ, rod, strain, caches)
 
     function total_energy_nonalloc(q::Vector{T}) where T
 
-        Δx, Δθ, rod, strain, cache = p_cache
+        Δx, Δθ, rod, strain, caches = p_cache
+        cache_6ne, cache_9ns = caches
 
         param_2_rod!(Δx, Δθ, q)
         delta = DER.rod_delta(Δx, Δθ)
         DER.copy!(rod, ref_rod)
         DER.rod_update!(rod, delta, cache)
-        DER.full_kinematics!(strain, rod, cache)
-        DER.elastic_energy(ref_strain, strain, props, cache)
+        DER.full_kinematics!(strain, rod, (cache_6ne, cache_9ns))
+        DER.elastic_energy(ref_strain, strain, props, cache_9ns)
     end
 
     # Allocating

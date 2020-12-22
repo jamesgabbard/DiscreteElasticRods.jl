@@ -68,8 +68,6 @@ function ptransport_inner_coefficient!(out, s2, c)
     end
 end
 
-#out = s2 > PTRANSPORT_TOL^2 ? (1-c)/s2 : 1/2 + (1-c)/4 + (1-c)^2/8*(1 + s2/4)
-
 # Cache needs to be 6 x ne
 function ptransport!(v2, v1, t1, t2, cache)
     X = view(cache, 1:3, :)

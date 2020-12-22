@@ -35,27 +35,27 @@
 # ---------------------------------------------------------------------------------
 #  A future project: Reference Twist Kinematics (Lestringant 2020)
 # ---------------------------------------------------------------------------------
-# function spherical_excess(t1, t2, t3)
-#
-#     ca = dot3(t2,t3)
-#     cb = dot3(t3,t1)
-#     cc = dot3(t1,t2)
-#
-#     sa = norm3(cross3(t2,t3))
-#     sb = norm3(cross3(t3,t1))
-#     sc = norm3(cross3(t1,t2))
-#
-#     cA = (ca - cb.*cc)./(sb.*sc)
-#     cB = (cb - cc.*ca)./(sc.*sa)
-#     cC = (cc - ca.*cb)./(sa.*sb)
-#
-#     V = dot3(cross3(t1,t2),t3)
-#     sA = V./(sb.*sc)
-#     sB = V./(sc.*sa)
-#     sC = V./(sa.*sb)
-#
-#     atan.(sA,cA) + atan.(sB,cB) + atan.(sC,cC) - π
-# end
+function spherical_excess(t1, t2, t3)
+
+    ca = dot3(t2,t3)
+    cb = dot3(t3,t1)
+    cc = dot3(t1,t2)
+
+    sa = norm3(cross3(t2,t3))
+    sb = norm3(cross3(t3,t1))
+    sc = norm3(cross3(t1,t2))
+
+    cA = (ca - cb.*cc)./(sb.*sc)
+    cB = (cb - cc.*ca)./(sc.*sa)
+    cC = (cc - ca.*cb)./(sa.*sb)
+
+    V = dot3(cross3(t1,t2),t3)
+    sA = V./(sb.*sc)
+    sB = V./(sc.*sa)
+    sC = V./(sa.*sb)
+
+    atan.(sA,cA) + atan.(sB,cB) + atan.(sC,cC) - π
+end
 
 # function fused_update_strains_energy(r::basic_rod, Δr::rod_update, ϵr::rod_strains)
 #

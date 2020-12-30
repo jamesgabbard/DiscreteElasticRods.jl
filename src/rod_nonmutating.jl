@@ -142,7 +142,7 @@ function full_kinematics(x, d1)
     d1_transport = ptransport(d1l, t1, t2)
     cosτ = dot3(d1_transport, d1r)
     sinτ = dot3(d1_transport, d2r)
-    τ = atan.(sinτ, cosτ)
+    τ = -1.0.*atan.(sinτ, cosτ)
 
     l, κ, τ
 end

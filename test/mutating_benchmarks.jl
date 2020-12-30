@@ -9,18 +9,18 @@ a = rand(3,N)
 b = rand(3,N)
 c = rand(3,N)
 
-@btime DER.cross3!(c,a,b)
+@btime DER.cross3!($c,$a,$b)
 
 c = rand(1,N)
-@btime DER.dot3!(c,a,b)
+@btime DER.dot3!($c,$a,$b)
 
-@btime DER.norm3!(c, a)
+@btime DER.norm3!($c, $a)
 
-@btime DER.norm3!(a)
+@btime DER.norm3!($a)
 
 e = rand(3,N-1)
-@btime DER.edges!(e,b)
-@btime DER.tangents!(e,b)
+@btime DER.edges!($e,$b)
+@btime DER.tangents!($e,$b)
 
 # Parallel Transport and Rotation
 v1 = rand(3,N)
@@ -31,10 +31,10 @@ DER.norm3!(t1)
 DER.norm3!(t2)
 
 cache = zeros(6,N)
-@btime DER.ptransport!(v2,v1,t1,t2,cache)
+@btime DER.ptransport!($v2,$v1,$t1,$t2,$cache)
 
 θ = rand(1,N)
-@btime DER.rotate_orthogonal_unit!(v2,t2,θ,cache)
+@btime DER.rotate_orthogonal_unit!($v2,$t2,$θ,$cache)
 
 # Update and Kinematics
 x = rand(3,N)

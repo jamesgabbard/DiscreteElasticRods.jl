@@ -174,7 +174,7 @@ function full_kinematics!(l, κ, τ, x, d1, caches)
     ptransport!(d1trans, d1l, t1, t2, pt_cache)
     dot3!(cosτ, d1r, d1trans)
     dot3!(sinτ, d2r, d1trans)
-    τ .= atan.(sinτ, cosτ)
+    τ .= -1.0.*atan.(sinτ, cosτ)
 end
 
 # cache (3 x nv-2)

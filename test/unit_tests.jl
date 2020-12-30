@@ -1,7 +1,7 @@
 DER = DiscreteElasticRods
 using LinearAlgebra
 
-@testset "DER_nonmutating" begin
+@testset "core_nonmutating" begin
 
     # Basic Linear Algebra: cross3, dot3, norm3, norm3!
     a = [1. 2.; 2. 5.; 9. 6.]
@@ -9,10 +9,15 @@ using LinearAlgebra
     xab = [-31. 28.; 29. 2.; -3. -11]
     dab = [77. 64.]
     na = [sqrt(86) sqrt(65)]
-    ta = a./na
     @test xab ≈ DER.cross3(a,b)
     @test dab ≈ DER.dot3(a,b)
     @test na ≈ DER.norm3(a)
+
+    # Edges and Tangents
+    ea = [1.; 3.; -3.]
+    ta = ea./sqrt(19)
+    @test ea ≈ DER.edges(a)
+    @test ta ≈ DER.tangents(a)
 
     # Parallel transport
     θ = [1.0 0.01 0.0]
@@ -37,9 +42,23 @@ using LinearAlgebra
     t = [1., 0., 0.]
     @test DER.rotate_orthogonal_unit(v1, [t t], [θ θ]) ≈ v2
 
+    # Basic Rod update
+    x0 = [0. 1. 2.; 0. 0. 0.; 0. 0. 0.]
+    d0 = [0. 0.; 0. 0.; 1. 1.]
+    Δx = [0. 0. 0.; 0. 0. 0.; 0. 1. 0.]
+    Δθ = [0. π/2]
+    x, d = DER.rod_update(x0, d0, Δx, Δθ)
+    @test x ≈ x0 + Δx
+    @test d ≈ [-1/sqrt(2) 0; 0. -1.; 1/sqrt(2) 0.]
+
+    # Full kinematics
+    l, κ, τ = DER.full_kinematics(x, d)
+    @test l ≈ [sqrt(2) sqrt(2)]
+    @test κ ≈ [-1.; 1.]
+    @test τ ≈ [π/2]
 end
 
-@testset "DER_mutating" begin
+@testset "core_mutating" begin
 
     # Basic Linear Algebra: cross3, dot3, norm3, norm3!
     a = [1. 2.; 2. 5.; 9. 6.]
@@ -59,15 +78,23 @@ end
     DER.dot3!(d,a,b)
     @test dab ≈ d
 
-    DER.dot3!(d,a,b,cache)
-    @test dab ≈ d
-
     DER.norm3!(d,a)
     @test na ≈ d
 
     c = copy(a)
     DER.norm3!(c)
     @test ta ≈ c
+
+    # Edges and tangents
+    eb = [-1.0; -3.0; 1.0]
+    c = similar(eb)
+    DER.edges!(c,b)
+    @test eb ≈ c
+
+    tb = eb./sqrt(11)
+    c = similar(tb)
+    DER.tangents!(c,b)
+    @test tb ≈ c
 
     # Parallel transport inner coeff: TBD!
     θ = [1.0 0.01 0.0]
@@ -108,6 +135,28 @@ end
     DER.rotate_orthogonal_unit!(v1, [t t], [θ θ], cache)
     @test  v1 ≈ v2
 
+    # Basic Rod update
+    x1 = [0. 1. 2.; 0. 0. 0.; 0. 0. 0.]
+    d1 = [0. 0.; 0. 0.; 1. 1.]
+    Δx = [0. 0. 0.; 0. 0. 0.; 0. 1. 0.]
+    Δθ = [0. π/2]
+    x2 = x0 + Δx
+    d2 = [-1/sqrt(2) 0; 0. -1.; 1/sqrt(2) 0.]
+    cache = zeros(15,3)
+    DER.rod_update!(x1, d1, Δx, Δθ, cache)
+    @test x1 ≈ x2
+    @test d1 ≈ d2
+
+    # Full Kinematics
+    l = zeros(1,2)
+    κ = zeros(2,1)
+    τ = zeros(1,1)
+    caches = (zeros(6,2), zeros(9,1))
+    DER.full_kinematics!(l, κ, τ, x2, d2, caches)
+    @test l ≈ [sqrt(2) sqrt(2)]
+    @test κ ≈ [-1.; 1.]
+    @test τ ≈ [π/2]
+
 end
 
-# Next up: edges and tangents! (everything in rod_core)
+# Next: Elastic and Gravitational energy

@@ -3,19 +3,15 @@
 # returns tuples of arrays. Convenience overloads are at the
 # end of the file
 
-# Store rods as either rows or columns
-# This typing is compiled away, but allows you to specify the storage
-# order for rod coordiantes
-
 """
         cross3(a,b)
 
 Cross products of the columns of two 3 x N arrays. Output is also 3 x N
 """
 function cross3(a,b)
-    vcat(a[2:2,:].*b[3:3,:] .- a[3:3,:].*b[2:2,:],
-         a[3:3,:].*b[1:1,:] .- a[1:1,:].*b[3:3,:],
-         a[1:1,:].*b[2:2,:] .- a[2:2,:].*b[1:1,:])
+    hcat(a[:,2].*b[:,3] .- a[:,3].*b[:,2],
+         a[:,3].*b[:,1] .- a[:,1].*b[:,3],
+         a[:,1].*b[:,2] .- a[:,2].*b[:,1])
 end
 
 """
@@ -24,7 +20,7 @@ end
 Dot products of the columns of two 3 x N arrays. Output is 1 x N
 """
 function dot3(a,b)
-    sum(a.*b, dims=1)
+    sum(a.*b, dims=2)
 end
 
 """
@@ -33,7 +29,7 @@ end
 Norms of the columns of two 3 x N arrays. Output is 1 x N
 """
 function norm3(a)
-    sqrt.(sum(abs2, a, dims=1))
+    sqrt.(sum(abs2, a, dims=2))
 end
 
 """
@@ -42,8 +38,8 @@ end
 Edges of a centerline `x`, stored as a 3 x N array. Output is 3 x N-1
 """
 function edges(x)
-    x1 = @view x[:,2:end]
-    x2 = @view x[:,1:end-1]
+    x1 = @view x[2:end,:]
+    x2 = @view x[1:end-1,:]
     x1 .- x2
 end
 
@@ -118,7 +114,7 @@ twist calculations used in Lestringant, Audoly, and Kochmann (2020)
 function full_kinematics(x, d1)
 
     # Tangents and directors
-    nv = size(x,2)
+    nv = size(x,1)
     #e =x[:, 2:nv] .- x[:, 1:nv-1]
     e = edges(x)
     l = norm3(e)
@@ -126,16 +122,16 @@ function full_kinematics(x, d1)
     d2 = cross3(t, d1)
 
     # Split into halves of the rod
-    t1 = @view t[:,1:nv-2]
-    t2 = @view t[:,2:nv-1]
-    d1l = @view d1[:,1:nv-2]
-    d1r = @view d1[:,2:nv-1]
-    d2l = @view d2[:,1:nv-2]
-    d2r = @view d2[:,2:nv-1]
+    t1 = @view t[1:nv-2,:]
+    t2 = @view t[2:nv-1,:]
+    d1l = @view d1[1:nv-2,:]
+    d1r = @view d1[2:nv-1,:]
+    d2l = @view d2[1:nv-2,:]
+    d2r = @view d2[2:nv-1,:]
 
     # Curvatures
     k = 2 .*cross3(t1, t2)./(1.0 .+ dot3(t1, t2))
-    κ  = vcat(dot3(k, (d2l + d2r)./2),
+    κ  = hcat(dot3(k, (d2l + d2r)./2),
              -dot3(k, (d1l + d1r)./2))
 
     # Twists
@@ -195,7 +191,7 @@ respectively.
 function elastic_energy(l0,κ0,τ0, l,κ,τ, k,B,β)
 
     # Reference voronoi lengths
-    vl0 = [l0[1]; l0[2:end-1]/2]' + [l0[2:end-1]/2; l0[end]]'
+    vl0 = [l0[1]; l0[2:end-1]/2] + [l0[2:end-1]/2; l0[end]]
 
     # Energies
     Es = 1/2*sum(k./l0.*(l - l0).^2)
@@ -217,9 +213,9 @@ Gravitational energy, calculated from centerline.
 Gravity is assumed to act in the negative `z` direction.
 """
 function gravitational_energy(x, m, g)
-    nv = size(x,2)
-    z = (x[3:3, 1:nv-1] .+ x[3:3,2:nv])./2
-    sum(g.*m.*z)
+    nv = size(x,1)
+    z = (x[1:nv-1, 3] .+ x[2:nv,3])
+    sum(m.*z)*g/2
 end
 
 # ------------------------------------------------------------------------------

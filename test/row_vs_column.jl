@@ -127,11 +127,8 @@ function edges_col!(e, x)
 end
 
 function edges_row!(e, x)
-    @inbounds for i = 1:size(e,2)
-        e[i,1] = x[i+1,1] - x[i,1]
-        e[i,2] = x[i+1,2] - x[i,2]
-        e[i,3] = x[i+1,3] - x[i,3]
-    end
+    nv = size(x, 1)
+    e .= view(x, 2:nv, :) .- view(x, 1:nv-1, :)
 end
 
 
@@ -294,19 +291,19 @@ function rod_update_row!(x, d, Δx, Δθ, cache)
 end
 
 x = rand(3,N)
-d = rand(3,N)
+d = rand(3,N-1)
 norm3_col!(d)
 Δx = rand(3,N)
-Δθ = rand(1,N)
-cache = zeros(15,N)
+Δθ = rand(1,N-1)
+cache = zeros(15,N-1)
 @btime rod_update_col!($x,$d,$Δx,$Δθ,$cache)
 
 x = rand(N,3)
-d = rand(N,3)
+d = rand(N-1,3)
 norm3_row!(d)
 Δx = rand(N,3)
-Δθ = rand(N,1)
-cache = zeros(N,15)
+Δθ = rand(N-1,1)
+cache = zeros(N-1,15)
 @btime rod_update_row!($x,$d,$Δx,$Δθ,$cache)
 
 # ------------------------------------------------------------------------------

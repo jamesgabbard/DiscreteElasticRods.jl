@@ -8,20 +8,20 @@
 # ------------------------------------------------------------------------------
 
 struct basic_rod{T<:Real}
-    x::Matrix{T} # 3 x ns + 2
-    d::Matrix{T} # 3 x ns + 1
+    x::Matrix{T} # (ns + 2) x 3
+    d::Matrix{T} # (ns + 1) x 3
 end
 
 struct rod_delta{T<:Real}
-    Δx::Matrix{T} # 3 x ns + 2
-    Δθ::Matrix{T} # 1 x ns + 1
+    Δx::Matrix{T} # (ns + 2) x 3
+    Δθ::Matrix{T} # (ns + 1) x 1
 end
 
 # Strains
 struct rod_strains{T<:Real}
-    l::Matrix{T} # 1 x ns + 1
-    κ::Matrix{T} # 2 x ns
-    τ::Matrix{T} # 1 x ns
+    l::Matrix{T} # ns + 1
+    κ::Matrix{T} # ns x 2
+    τ::Matrix{T} # ns
 end
 
 # ------------------------------------------------------------------------------
@@ -42,21 +42,21 @@ function copy!(r1::basic_rod, r2::basic_rod)
 end
 
 function allocate_rod(T::Type, ns::Int)
-    x = Matrix{T}(undef, 3, ns+2) # 3 x ns + 2
-    d = Matrix{T}(undef, 3, ns+1)
+    x = Matrix{T}(undef, ns+2, 3)
+    d = Matrix{T}(undef, ns+1, 3)
     basic_rod(x,d)
 end
 
 function allocate_strain(T::Type, ns::Int)
-    l = Matrix{T}(undef, 1, ns+1)
-    κ = Matrix{T}(undef, 2, ns)
-    τ = Matrix{T}(undef, 1, ns)
+    l = Matrix{T}(undef, ns+1)
+    κ = Matrix{T}(undef, ns, 2)
+    τ = Matrix{T}(undef, ns)
     rod_strains(l, κ, τ)
 end
 
 function allocate_delta(T::Type, ns::Int)
-    Δx = Matrix{T}(undef, 3, ns+2)
-    Δθ = Matrix{T}(undef, 3, ns+1)
+    Δx = Matrix{T}(undef, ns+2, 3)
+    Δθ = Matrix{T}(undef, ns+1, 1)
     return rod_delta(Δx, Δθ)
 end
 
@@ -75,14 +75,14 @@ abstract type rod_properties end
 # All properties vary along the length
 struct vector_rod_properties{T<:Real} <: rod_properties
     k::Vector{T}
-    B::Matrix{T} # 2 x nv_int
+    B::Matrix{T} # ns x 2
     β::Vector{T}
 end
 
 # Constant properties, anisotropic cross section
 struct scalar_rod_properties{T<:Real} <: rod_properties
-    k::T # 2 x nv_int
-    B::Vector{T}
+    k::T
+    B::Matrix{T}# 1 x 2
     β::T
 end
 

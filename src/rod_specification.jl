@@ -130,7 +130,7 @@ function discrete_rod(xfun::Function, dfun::Function, s, N::Int)
      G = E/(2*(1 + ν))
      A = π*a*b
      k = E*A
-     B = E*A/4*[a^2, b^2]
+     B = E*A/4*[a^2 b^2]
      β = G*A*(a^2 + b^2)/4
      scalar_rod_properties(k, B, β)
  end
@@ -143,8 +143,8 @@ function discrete_rod(xfun::Function, dfun::Function, s, N::Int)
  """
  function random_rod(ns::Int)
 
-     x = randn(3, ns+2)
-     d = randn(3, ns+1)
+     x = randn(ns+2, 3)
+     d = randn(ns+1, 3)
 
      t = tangents(x)
      d = d .- dot3(d,t).*t
@@ -152,6 +152,20 @@ function discrete_rod(xfun::Function, dfun::Function, s, N::Int)
 
      basic_rod(x,d)
   end
+
+  """
+      random_delta(ns)
+
+  Return an admissible rod_delta for a rod with ns segments.
+
+  """
+  function random_delta(ns::Int)
+
+      x = randn(ns+2, 3)
+      θ = randn(ns+1, 1)
+      rod_delta(x,θ)
+
+   end
 
 # ------------------------------------------------------------------------------
 # Specification Layer Stuff

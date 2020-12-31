@@ -1,4 +1,4 @@
-function grad_elastic_energy(rod::basic_rod, rod_props::rod_properties, ref_strains::rod_strains)
+function elastic_forces(rod::basic_rod, rod_props::rod_properties, ref_strains::rod_strains)
 
     # unpack
     l0, κ0, τ0 =  ref_strains.l, ref_strains.κ, ref_strains.τ
@@ -73,4 +73,24 @@ function grad_elastic_energy(rod::basic_rod, rod_props::rod_properties, ref_stra
     dEdθ = dEtdθ .+ dEbdθ
 
     rod_delta(dEdx, dEdθ)
+end
+
+function gradient_update(x0, d0, Δx, Δθ)
+
+    x = x0 + Δx
+    e = edges(x)
+    l = norm3(e)
+    t = e./l
+    t0 = tangents(x0)
+    d = ptransport(d0, t0, t)
+    d = rotate_orthogonal_unit(d, t, Δθ)
+
+    b = cross3(t, t0)./(1. .+ dot3(t, t0))
+    ζ = b./l
+    x, d, ζ
+end
+
+function gradient_update(ref::basic_rod, dr::rod_delta)
+    x, d, ζ = gradient_update(ref.x, ref.d, dr.Δx, dr.Δθ)
+    basic_rod(x, d), ζ
 end

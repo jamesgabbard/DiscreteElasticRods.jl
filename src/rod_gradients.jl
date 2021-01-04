@@ -1,3 +1,9 @@
+"""
+        elastic_forces(rod::basic_rod, rod_props::rod_properties, ref_strains::rod_strains)
+
+Calculate elastic forces acting on a rod. Output is a rod_delta type, containing
+the (positive) gradient of elastic energy with respect to each degree of freedom.
+"""
 function elastic_forces(rod::basic_rod, rod_props::rod_properties, ref_strains::rod_strains)
 
     # unpack
@@ -85,12 +91,159 @@ function gradient_update(x0, d0, Δx, Δθ)
     d = ptransport(d0, t0, t)
     d = rotate_orthogonal_unit(d, t, Δθ)
 
-    b = cross3(t, t0)./(1. .+ dot3(t, t0))
-    ζ = b./l
+    ζ = cross3(t, t0)./(l.*(1 .+ dot3(t, t0)))
+
     x, d, ζ
 end
 
 function gradient_update(ref::basic_rod, dr::rod_delta)
     x, d, ζ = gradient_update(ref.x, ref.d, dr.Δx, dr.Δθ)
     basic_rod(x, d), ζ
+end
+
+# Cache should be ((ns + 1 x 7), (ns x 28))
+function elastic_forces!(forces::rod_delta, rod::basic_rod,
+    rod_props::rod_properties, ref_strains::rod_strains, caches)
+
+    # unpack
+    l0, κ0, τ0 =  ref_strains.l, ref_strains.κ, ref_strains.τ
+    k, B, β = rod_props.k, rod_props.B, rod_props.β
+    x, d1 = rod.x, rod.d
+    dEdx, dEdθ = forces.Δx, forces.Δθ
+
+    nv = size(x,1)
+    ne = nv - 1
+
+    # Unpack and divy up cache1
+    cache1, cache2 = caches
+    t = view(cache1, :, 1:3)
+    l = view(cache1, :, 4)
+    dEsde = view(cache1, :, 5:7) # Overwritten early
+    d2 = view(cache1, :, 5:7)
+
+    # Permanent cache2 space (never overwritten)
+    vl0 = view(cache2, :, 1)
+    kb = view(cache2, :, 2:4)
+    dEde1 = view(cache2, :, 5:7)
+    dEde2 = view(cache2, :, 8:10)
+
+    # Bending cache2 space (overwritten for twist)
+    chi = view(cache2, :, 11)
+    ttild = view(cache2, :, 12:14)
+    dtild = view(cache2, :, 15:17)
+    κ1l = view(cache2, :, 18)
+    κ1r = view(cache2, :, 19)
+    κ2l = view(cache2, :, 20)
+    κ2r = view(cache2, :, 21)
+    κ1 = view(cache2, :, 22)
+    κ2 = view(cache2, :, 23)
+    dEdκ1 = view(cache2, :, 24)
+    dEdκ2 = view(cache2, :, 25)
+    dκde = view(cache2, :, 26:28)
+
+    # Edges and lengths
+    edges!(t, x)
+    norm3!(l, t)
+    t ./= l
+
+    vl0[1] = l0[1] + l0[2]/2
+    vl0[2:ne-2] .= (view(l0, 2:ne-2) .+ view(l0, 3:ne-1))./2
+    vl0[ne-1] = l0[ne-1]/2 + l0[ne]
+
+    # Stretching Forces
+    dEsde .= (k.*(l .- l0)./l0).*t
+    dEdx .= 0.0
+    view(dEdx, 1:nv-1, :) .-= dEsde
+    view(dEdx, 2:nv, :) .+= dEsde
+
+    # Break tangents and directors into sets
+    cross3!(d2, t, d1)
+    l1 = @view l[1:nv-2]
+    l2 = @view l[2:nv-1]
+    t1 = @view t[1:nv-2,:]
+    t2 = @view t[2:nv-1,:]
+    d1l = @view d1[1:nv-2,:]
+    d1r = @view d1[2:nv-1,:]
+    d2l = @view d2[1:nv-2,:]
+    d2r = @view d2[2:nv-1,:]
+
+    # Curvature
+    dot3!(chi, t1, t2)
+    chi .+= 1.0
+    cross3!(kb, t1, t2)
+    kb .*= 2.0./chi
+
+    dot3!(κ1l, kb, d2l)
+    dot3!(κ1r, kb, d2r)
+    dot3!(κ2l, kb, d1l)
+    dot3!(κ2r, kb, d1r)
+    κ2l .*= -1.0
+    κ2r .*= -1.0
+    κ1 .= (κ1l .+ κ1r)./2
+    κ2 .= (κ2l .+ κ2r)./2
+    dEdκ1 .= view(B, :, 1).*(κ1 .- view(κ0, :, 1))./vl0
+    dEdκ2 .= view(B, :, 2).*(κ2 .- view(κ0, :, 2))./vl0
+
+    # Curvature Derivatives
+    ttild .= (t1 .+ t2)./chi
+    dtild .= (d2l .+ d2r)./chi
+
+    # dκ1de1
+    dtild .= (d2l .+ d2r)./chi # d2tild
+    cross3!(dκde, t2, dtild)
+    dκde .-= κ1.*ttild
+    dκde ./= l1
+    dEde1 .= dEdκ1.*dκde
+
+    # dκ1de2
+    cross3!(dκde, t1, dtild)
+    dκde .+= κ1.*ttild
+    dκde ./= -1.0.*l2
+    dEde2 .= dEdκ1.*dκde
+
+    # dκ2de1
+    dtild .= (d1l .+ d1r)./chi # d1tild
+    cross3!(dκde, t2, dtild)
+    dκde .+= κ2.*ttild
+    dκde ./= -1.0.*l1
+    dEde1 .+= dEdκ2.*dκde
+
+    # dκ2de2
+    cross3!(dκde, t1, dtild)
+    dκde .-= κ2.*ttild
+    dκde ./= l2
+    dEde2 .+= dEdκ2.*dκde
+
+    # Bending forces and moments
+    dEdθ .= 0.0
+    view(dEdθ, 1:nv-2) .+= (κ2l.*dEdκ1 .- κ1l.*dEdκ2)./2
+    view(dEdθ, 2:nv-1) .+= (κ2r.*dEdκ1 .- κ1r.*dEdκ2)./2
+
+    # Reallocate Cache Space for Twists
+    pt_cache = view(cache2, :, 11:16)
+    d1trans = view(cache2, :, 17:19)
+    cosτ = view(cache2, :, 20)
+    sinτ = view(cache2, :, 21)
+    τ = view(cache2, :, 22)
+    dEdτ = view(cache2, :, 23)
+
+    # Twists
+    ptransport!(d1trans, d1l, t1, t2, pt_cache)
+    dot3!(cosτ, d1r, d1trans)
+    dot3!(sinτ, d2r, d1trans)
+    τ .= -1.0.*atan.(sinτ, cosτ)
+    #
+    # # Twisting Moments
+    dEdτ .= β.*(τ .- view(τ0, :))./vl0
+    view(dEdθ, 1:nv-2) .-= dEdτ
+    view(dEdθ, 2:nv-1) .+= dEdτ
+    dEde1 .+= dEdτ.*kb./(2 .*l1)
+    dEde2 .+= dEdτ.*kb./(2 .*l2)
+
+    # Assemble into output array
+    view(dEdx, 1:nv-2, :) .-= dEde1
+    view(dEdx, 2:nv-1, :) .+= dEde1 .- dEde2
+    view(dEdx, 3:nv, :) .+= dEde2
+
+    return nothing
 end

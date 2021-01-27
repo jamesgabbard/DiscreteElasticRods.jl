@@ -1,4 +1,3 @@
-DER = DiscreteElasticRods
 using LinearAlgebra
 
 @testset "core_nonmutating" begin
@@ -141,16 +140,19 @@ end
     Δθ = [0., π/2]
     x2 = x1 + Δx
     d2 = [-1/sqrt(2) 0. 1/sqrt(2); 0. -1. 0.]
-    cache = zeros(2, 15)
-    DER.rod_update!(x1, d1, Δx, Δθ, cache)
-    @test x1 ≈ x2
-    @test d1 ≈ d2
+
+    xout = similar(x1)
+    dout = similar(d1)
+    cache = DER.allocate_cache(DER.rod_update!, Float64, 1)
+    DER.rod_update!(xout, dout, x1, d1, Δx, Δθ, cache)
+    @test xout ≈ x2
+    @test dout ≈ d2
 
     # Full Kinematics
     l = zeros(2)
     κ = zeros(1,2)
     τ = zeros(1)
-    caches = (zeros(2,6), zeros(1,9))
+    caches = DER.allocate_cache(DER.full_kinematics!, Float64, 1)
     DER.full_kinematics!(l, κ, τ, x2, d2, caches)
     @test l ≈ [sqrt(2), sqrt(2)]
     @test κ ≈ [-1. 1.]

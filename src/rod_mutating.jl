@@ -108,24 +108,22 @@ function rotate_orthogonal_unit!(v, t, θ, cache)
 end
 
 # Update kinematics given displacement and twist
-# cache is ne x 15 (ouch)
-function rod_update!(x, d, Δx, Δθ, cache)
+function rod_update!(x1, d1, x0, d0, Δx, Δθ, cache)
     t0 = view(cache, :, 1:3)
-    t = view(cache, :, 4:6)
-    d0 = view(cache, :, 7:9)
-    cache_pt = view(cache, :, 10:15)
-    cache_rt = view(cache, :, 10:14)
+    t1 = view(cache, :, 4:6)
+    cache_pt = view(cache, :, 7:12)
+    cache_rt = view(cache, :, 7:11)
 
-    tangents!(t0, x)
-    x .+= Δx
-    tangents!(t, x)
+    tangents!(t0, x0)
+    x1 .= x0 .+ Δx
+    tangents!(t1, x1)
 
-    d0 .= d
-    ptransport!(d, d0, t0, t, cache_pt)
-    rotate_orthogonal_unit!(d, t, Δθ, cache_pt)
+    ptransport!(d1, d0, t0, t1, cache_pt)
+    rotate_orthogonal_unit!(d1, t1, Δθ, cache_pt)
 end
 
-# caches is (nv-1 x 6, nv-2 x 9)
+allocate_cache(f::typeof(rod_update!), T::Type, ns) = zeros(T, ns+1, 12)
+
 function full_kinematics!(l, κ, τ, x, d1, caches)
 
     # Unpack and divy up caches
@@ -171,7 +169,10 @@ function full_kinematics!(l, κ, τ, x, d1, caches)
     τ .= -1.0.*atan.(sinτ, cosτ)
 end
 
-# cache is ne x 3
+allocate_cache(f::typeof(full_kinematics!), T::Type, ns) =
+    (zeros(T, ns+1, 6), zeros(T, ns, 9))
+
+# Elastic Energy
 function elastic_energy(l0,κ0,τ0, l,κ,τ, k,B,β, cache)
     ne = length(l)
     nv = ne - 1
@@ -196,6 +197,8 @@ function elastic_energy(l0,κ0,τ0, l,κ,τ, k,B,β, cache)
     Es + Et + Eb
 end
 
+allocate_cache(f::typeof(elastic_energy), T::Type, ns) = zeros(T, ns+1, 3)
+
 # cache is at least ne
 function gravitational_energy(x, m, g, cache)
     nv = size(x,1)
@@ -215,8 +218,8 @@ function tangents!(e, r::basic_rod)
     tangents!(e, r.x)
 end
 
-function rod_update!(r::basic_rod, Δr::rod_delta, cache)
-    rod_update!(r.x, r.d, Δr.Δx, Δr.Δθ, cache)
+function rod_update!(new::basic_rod, old::basic_rod, Δr::rod_delta, cache)
+    rod_update!(new.x, new.d, old.x, old.d, Δr.Δx, Δr.Δθ, cache)
 end
 
 function full_kinematics!(s::rod_strains, r::basic_rod, cache)
@@ -230,3 +233,21 @@ function elastic_energy(ref_strains::rod_strains, strains::rod_strains,
     k, B, β = rod_props.k, rod_props.B, rod_props.β
     elastic_energy(l0,κ0,τ0, l,κ,τ, k,B,β, cache)
 end
+
+# ------------------------------------------------------------------------------
+# Overload for convenience
+# ------------------------------------------------------------------------------
+
+# immutable DiffCache{T<:AbstractArray, S<:AbstractArray}
+#     du::T
+#     dual_du::S
+# end
+# #
+# function DiffCache{chunk_size}(T, size, ::Type{Val{chunk_size}})
+#     DiffCache(zeros(T, size...), zeros(ForwardDiff.Dual{nothing,T,chunk_size}, size...))
+# end
+#
+# DiffCache(u::AbstractArray) = DiffCache(eltype(u),size(u),Val{ForwardDiff.pickchunksize(length(u))})
+# DiffCache(u::AbstractArray, size) = DiffCache(eltype(u),size,Val{ForwardDiff.pickchunksize(length(u))})
+# get_tmp{T<:ForwardDiff.Dual}(dc::DiffCache, ::Type{T}) = dc.dual_du
+# get_tmp(dc::DiffCache, T) = dc.du

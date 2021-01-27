@@ -8,13 +8,13 @@
 # ------------------------------------------------------------------------------
 
 struct basic_rod{T<:Real}
-    x::Matrix{T} # (ns + 2) x 3
-    d::Matrix{T} # (ns + 1) x 3
+    x::AbstractArray{T} # (ns + 2) x 3
+    d::AbstractArray{T} # (ns + 1) x 3
 end
 
 struct rod_delta{T<:Real}
-    Δx::Matrix{T} # (ns + 2) x 3
-    Δθ::Matrix{T} # (ns + 1) x 1
+    Δx::AbstractArray{T} # (ns + 2) x 3
+    Δθ::AbstractArray{T} # (ns + 1) x 1
 end
 
 # Strains
@@ -60,6 +60,10 @@ function allocate_delta(T::Type, ns::Int)
     return rod_delta(Δx, Δθ)
 end
 
+function zero_delta(T::Type, ns::Int)
+    return rod_delta(zeros(T, ns+2, 3), zeros(T, ns+1, 1))
+end
+
 # ----------------------------------------------------------------------------------
 #  Elastic Energy Computation
 # ----------------------------------------------------------------------------------
@@ -74,21 +78,14 @@ abstract type rod_properties end
 
 # All properties vary along the length
 struct vector_rod_properties{T<:Real} <: rod_properties
-    k::Vector{T}
+    k::Vector{T} # ns + 1
     B::Matrix{T} # ns x 2
-    β::Vector{T}
+    β::Vector{T} # ns
 end
 
 # Constant properties, anisotropic cross section
 struct scalar_rod_properties{T<:Real} <: rod_properties
     k::T
     B::Matrix{T}# 1 x 2
-    β::T
-end
-
-# Constant properties, isotropic cross section
-struct cylindrical_rod_properties{T<:Real} <: rod_properties
-    k::T # 2 x nv_int
-    B::T
     β::T
 end

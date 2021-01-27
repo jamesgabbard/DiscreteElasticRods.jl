@@ -76,7 +76,7 @@ julia> xfun, dfun = continuous_rod([0,0,0], [1,0,0], [0,0,1],
                                       s -> 2, s -> 1, s -> s*(1-s), [0,1])
 ```
 """
- function continuous_rod(x0, t0, d0, κ1::Function, κ2::Function, τ::Function, s)
+function continuous_rod(x0, t0, d0, κ1::Function, κ2::Function, τ::Function, s)
     p = (κ1, κ2, τ)
     prob = ODEProblem(bishop_system, [x0;t0;d0], s, p)
     sol = solve(prob, Tsit5(), abs_tol = 1e-8, rel_tol = 1e-8)
@@ -84,9 +84,9 @@ julia> xfun, dfun = continuous_rod([0,0,0], [1,0,0], [0,0,1],
     xfun(s) = sol(s)[1:3]
     dfun(s) = sol(s)[7:9]
     xfun, dfun
- end
+end
 
- """
+"""
     discrete_rod(xfun, dfun, s, N)
 
 Return a rod with centerline and directors approximating xfun(s) and dfun(s)
@@ -114,58 +114,85 @@ function discrete_rod(xfun::Function, dfun::Function, s, N::Int)
     d = d./norm3(d)
 
     basic_rod(x,d)
- end
+end
 
- """
-     elliptical_stiffness(E, ν, a, b)
+"""
+    elliptical_stiffness(E, ν, a, b)
 
- Return the elastic properties of a rod with elliptical section.
+Return the elastic properties of a rod with elliptical section.
 
- # Arguments
- - `E`: Elastic Modulus
- - `ν`: Poisson Ratio
- - `a`, `b`: Radii of the cross section
- """
- function elliptical_stiffness(E, ν, a, b)
+# Arguments
+- `E`: Elastic Modulus
+- `ν`: Poisson Ratio
+- `a`, `b`: Radii of the cross section
+"""
+function elliptical_stiffness(E, ν, a, b)
      G = E/(2*(1 + ν))
      A = π*a*b
      k = E*A
      B = E*A/4*[a^2 b^2]
      β = G*A*(a^2 + b^2)/4
      scalar_rod_properties(k, B, β)
- end
+end
 
- """
-     random_rod(ns)
+"""
+    random_rod(ns)
 
- Return an admissible rod with ns segments. Centerline and directors are random.
+Return an admissible rod with ns segments. Centerline and directors are random.
 
- """
- function random_rod(ns::Int)
+"""
+function random_rod(ns::Int)
 
-     x = randn(ns+2, 3)
-     d = randn(ns+1, 3)
+    x = randn(ns+2, 3)
+    d = randn(ns+1, 3)
 
-     t = tangents(x)
-     d = d .- dot3(d,t).*t
-     norm3!(d)
+    t = tangents(x)
+    d = d .- dot3(d,t).*t
+    norm3!(d)
 
-     basic_rod(x,d)
-  end
+    basic_rod(x,d)
+end
 
-  """
-      random_delta(ns)
+"""
+    random_delta(ns)
 
-  Return an admissible rod_delta for a rod with ns segments.
+Return an admissible rod_delta for a rod with ns segments.
 
-  """
-  function random_delta(ns::Int)
+"""
+function random_delta(ns::Int)
 
-      x = randn(ns+2, 3)
-      θ = randn(ns+1, 1)
-      rod_delta(x,θ)
+  x = randn(ns+2, 3)
+  θ = randn(ns+1, 1)
+  rod_delta(x,θ)
 
-   end
+end
+
+"""
+   arc_rod(p1, p2, d, r, ns)
+
+Return a rod spanning an arc from p1 to p2 with radius r and directors d.
+
+Discretization is done with ns segments. The director should be orthogonal
+to p2 - p1, and ther resulting arc will lie in the plane orthogonal to d.
+
+"""
+
+function arc_rod(p1, p2, d, r, ns)
+    l = norm(p2 - p1)
+    e1 = (p2 - p1)/l
+    e2 = sign(r)*cross(e1,d)
+    R = abs(r)
+
+    θ = asin(l/(2*R))
+    C = (p1 + p2)/2 - R*cos(θ)*e2
+
+    sv, se = discretize_span([-θ, θ], ns)
+    vertices = C' .+ R*sin.(sv).*e1' + R*cos.(sv).*e2'
+    directors = repeat(d', ns+1)
+    basic_rod(vertices, directors)
+end
+
+
 
 # ------------------------------------------------------------------------------
 # Specification Layer Stuff
@@ -259,3 +286,17 @@ using Zygote:@adjoint
 @adjoint basic_rod(x, d) = basic_rod(x, d), dr -> (dr.x, dr.d)
 @adjoint rod_delta(Δx, Δθ) = rod_delta(Δx, Δθ), dr -> (dr.Δx, dr.Δθ)
 @adjoint rod_strains(l, κ, τ) = rod_strains(l, κ, τ), ds -> (ds.l, ds.κ, ds.τ)
+
+
+# ------------------------------------------------------------------------------
+# Rotations via MRPs
+# ------------------------------------------------------------------------------
+using Rotations
+using StaticArrays
+using LinearAlgebra
+function spin_angle(R::Rotation{3,T}, t) where T
+    Rt = R*t
+    gP = RodriguesParam(SVector{3}(cross(t, R*t)/(1 + dot(t,R*t))))
+    gR = RodriguesParam(R)
+    2*atan(norm(gR*gP))
+end

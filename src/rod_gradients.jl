@@ -111,6 +111,11 @@ function elastic_forces!(forces::rod_delta, rod::basic_rod,
     x, d1 = rod.x, rod.d
     dEdx, dEdθ = forces.Δx, forces.Δθ
 
+    elastic_forces!(dEdx, dEdθ, x, d1, k, B, β, l0, κ0, τ0, caches)
+end
+
+function elastic_forces!(dEdx, dEdθ, x, d1, k, B, β, l0, κ0, τ0, caches)
+
     nv = size(x,1)
     ne = nv - 1
 
@@ -247,3 +252,58 @@ function elastic_forces!(forces::rod_delta, rod::basic_rod,
 
     return nothing
 end
+
+allocate_cache(f::typeof(elastic_forces!), T::Type, ns) =
+    (zeros(T, ns+1, 7), zeros(T, ns, 28))
+
+function gradient_update!(x1, d1, ζ, x0, d0, Δx, Δθ, cache)
+    t0 = view(cache, :, 1:3)
+    t1 = view(cache, :, 4:6)
+    l0 = view(cache, :, 7)
+    t1_dot_t0 = view(cache, :, 8)
+    cache_pt = view(cache, :, 7:12)
+    cache_rt = view(cache, :, 7:11)
+
+    edges!(t0, x0)
+    norm3!(l0, t0)
+    t0 ./= l0
+
+    x1 .= x0 .+ Δx
+    tangents!(t1, x1)
+
+    ptransport!(d1, d0, t0, t1, cache_pt)
+    rotate_orthogonal_unit!(d1, t1, Δθ, cache_pt)
+
+    cross3!(ζ, t1, t0)
+    dot3!(t1_dot_t0, t1, t0)
+    ζ ./= (l0.*(1 .+ t1_dot_t0))
+end
+
+function gradient_update!(new::basic_rod, ζ, old::basic_rod, dr::rod_delta, cache)
+    gradient_update!(new.x, new.d, ζ, old.x, old.d, dr.Δx, dr.Δθ, cache)
+end
+
+allocate_cache(f::typeof(gradient_update!), T::Type, ns) = zeros(T, ns+1, 12)
+
+#--------------------------------------------------------
+# Fusing the gradient update and forces step
+#--------------------------------------------------------
+
+function fused_update_gradient!(∇E, r, Δr, p, s, caches)
+
+    cache_vertices, cache_edges, cache_interior = caches
+
+    gu_cache = cache_edges
+    ef_cache = (cache_edges, cache_interior)
+    x = cache_vertices
+    d = @view cache_edges[:, 13:15]
+    ζ = @view cache_edges[:, 16:18]
+
+    gradient_update!(x, d, ζ, r.x, r.d, Δr.Δx, Δr.Δθ, gu_cache)
+    elastic_forces!(∇E.Δx, ∇E.Δθ, x, d, p.k, p.B, p.β, s.l, s.κ, s.τ, ef_cache)
+    (@view ∇E.Δx[1:end-1, :]) .-= ∇E.Δθ .* ζ
+    (@view ∇E.Δx[2:end,:]) .+= ∇E.Δθ .* ζ
+end
+
+allocate_cache(f::typeof(fused_update_gradient!), T::Type, ns) =
+    (zeros(T, ns+2, 3), zeros(T, ns+1, 18), zeros(T, ns, 28))

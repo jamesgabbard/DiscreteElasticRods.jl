@@ -1,9 +1,11 @@
-using BenchmarkTools
-N = 500
-
 # A script that compares row storage to column storage for rods
 # Also, a good reference for the most highly optimized kinematics
-# routines I could come up with!
+# routines I could come up with for each storage pattern.
+# Unsurprisingly, row storage is never slower, and often 2-3x faster
+# due to better memory access patterns.
+
+using BenchmarkTools
+N = 500
 
 # ------------------------------------------------------------------------------
 # Cross Products (Rows Win)

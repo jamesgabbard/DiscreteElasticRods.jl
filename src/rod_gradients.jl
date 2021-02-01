@@ -83,17 +83,17 @@ end
 
 function gradient_update(x0, d0, Δx, Δθ)
 
-    x = x0 + Δx
-    e = edges(x)
-    l = norm3(e)
-    t = e./l
+    x1 = x0 + Δx
+    e1 = edges(x1)
+    l1 = norm3(e1)
+    t1 = e1./l1
     t0 = tangents(x0)
-    d = ptransport(d0, t0, t)
-    d = rotate_orthogonal_unit(d, t, Δθ)
+    d1 = ptransport(d0, t0, t1)
+    d1 = rotate_orthogonal_unit(d1, t1, Δθ)
 
-    ζ = cross3(t, t0)./(l.*(1 .+ dot3(t, t0)))
+    ζ = cross3(t1, t0)./(l1.*(1 .+ dot3(t1, t0)))
 
-    x, d, ζ
+    x1, d1, ζ
 end
 
 function gradient_update(ref::basic_rod, dr::rod_delta)
@@ -259,31 +259,31 @@ allocate_cache(f::typeof(elastic_forces!), T::Type, ns) =
 function gradient_update!(x1, d1, ζ, x0, d0, Δx, Δθ, cache)
     t0 = view(cache, :, 1:3)
     t1 = view(cache, :, 4:6)
-    l0 = view(cache, :, 7)
+    l1 = view(cache, :, 7)
     t1_dot_t0 = view(cache, :, 8)
-    cache_pt = view(cache, :, 7:12)
-    cache_rt = view(cache, :, 7:11)
+    cache_pt = view(cache, :, 8:13)
+    cache_rt = view(cache, :, 8:12)
 
-    edges!(t0, x0)
-    norm3!(l0, t0)
-    t0 ./= l0
+    tangents!(t0, x0)
 
     x1 .= x0 .+ Δx
-    tangents!(t1, x1)
+    edges!(t1, x1)
+    norm3!(l1, t1)
+    t1 ./= l1
 
     ptransport!(d1, d0, t0, t1, cache_pt)
     rotate_orthogonal_unit!(d1, t1, Δθ, cache_pt)
 
     cross3!(ζ, t1, t0)
     dot3!(t1_dot_t0, t1, t0)
-    ζ ./= (l0.*(1 .+ t1_dot_t0))
+    ζ ./= (l1.*(1.0 .+ t1_dot_t0))
 end
 
 function gradient_update!(new::basic_rod, ζ, old::basic_rod, dr::rod_delta, cache)
     gradient_update!(new.x, new.d, ζ, old.x, old.d, dr.Δx, dr.Δθ, cache)
 end
 
-allocate_cache(f::typeof(gradient_update!), T::Type, ns) = zeros(T, ns+1, 12)
+allocate_cache(f::typeof(gradient_update!), T::Type, ns) = zeros(T, ns+1, 13)
 
 #--------------------------------------------------------
 # Fusing the gradient update and forces step
@@ -296,8 +296,8 @@ function fused_update_gradient!(∇E, r, Δr, p, s, caches)
     gu_cache = cache_edges
     ef_cache = (cache_edges, cache_interior)
     x = cache_vertices
-    d = @view cache_edges[:, 13:15]
-    ζ = @view cache_edges[:, 16:18]
+    d = @view cache_edges[:, 14:16]
+    ζ = @view cache_edges[:, 17:19]
 
     gradient_update!(x, d, ζ, r.x, r.d, Δr.Δx, Δr.Δθ, gu_cache)
     elastic_forces!(∇E.Δx, ∇E.Δθ, x, d, p.k, p.B, p.β, s.l, s.κ, s.τ, ef_cache)
@@ -306,4 +306,4 @@ function fused_update_gradient!(∇E, r, Δr, p, s, caches)
 end
 
 allocate_cache(f::typeof(fused_update_gradient!), T::Type, ns) =
-    (zeros(T, ns+2, 3), zeros(T, ns+1, 18), zeros(T, ns, 28))
+    (zeros(T, ns+2, 3), zeros(T, ns+1, 19), zeros(T, ns, 28))

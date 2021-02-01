@@ -1,3 +1,13 @@
+# ------------------------------------------------------------------------------
+# This would be a convenient system to manage cacheing of dual numbers.
+# Unfortunately, at least in Julia 1.5, reinterpreting an array of
+# Dual numbers leads to a large performance penalty. Until this is
+# resolved, a non-reinterpret-based solution is necessary
+
+# Note that ForwardDiff2 is currently under construction, so that
+# could be interesting
+# ------------------------------------------------------------------------------
+
 using DiscreteElasticRods
 using ForwardDiff
 abstract type DualType{V,N} end

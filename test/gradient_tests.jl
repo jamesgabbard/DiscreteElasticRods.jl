@@ -3,6 +3,8 @@ using LinearAlgebra
 using FiniteDiff
 using ForwardDiff
 using DiscreteElasticRods
+using Random
+Random.seed!(42)
 
 # Setup a random configuration
 N = 20
@@ -41,25 +43,33 @@ end
     @test norm(err)/norm(HessE) < 1e-5
 end
 
-# Compare the mutating gradient to the non-mutating one
+
 @testset "gradient_mutating" begin
 
-    # Dual Cache trick requires a reinterpret!
+    # Test gradient_update! against allocating version
+    dr = DER.random_delta(N)
+    nr_ref, ζ_ref = DER.gradient_update(rod, dr)
 
-    gE = DER.allocate_delta(Float64, N)
-    dr = DER.allocate_delta(Float64, N)
-    caches = DER.allocate_cache(DER.elastic_forces!, Float64, N)
+    newrod = DER.allocate_rod(Float64, N)
+    ζ = zeros(N+1, 3)
+    cache_gu = DER.allocate_cache(DER.gradient_update!, Float64, N)
+    DER.gradient_update!(newrod, ζ, rod, dr, cache_gu)
 
-    function ∇E_mutating(q)
-        DER.coordinate_storage!(dr, q)
-        newrod, ζ = DER.gradient_update(rod, dr)
-        DER.elastic_forces!(gE, newrod, rod_props, ref_strains, caches)
-        gE.Δx[1:end-1,:] .-= gE.Δθ .* ζ
-        gE.Δx[2:end,:] .+= gE.Δθ .* ζ
+    @test newrod.x ≈ nr_ref.x
+    @test newrod.d ≈ nr_ref.d
+    @test ζ ≈ ζ_ref
 
-        DER.coordinate_storage(gE)
-    end
+    # Test elastic_forces! against allocating version
+    ∇E_ref = DER.elastic_forces(newrod, rod_props, ref_strains)
 
+    ∇E = DER.allocate_delta(Float64, N)
+    cache_ef = DER.allocate_cache(DER.elastic_forces!, Float64, N)
+    DER.elastic_forces!(∇E, newrod, rod_props, ref_strains, cache_ef)
+
+    @test ∇E.Δx ≈ ∇E_ref.Δx
+    @test ∇E.Δθ ≈ ∇E_ref.Δθ
+
+    # Test fused_update_gradient! against allocating sequence
     function ∇E_reference(q)
         DER.coordinate_storage!(dr, q)
         newrod, ζ = DER.gradient_update(rod, dr)
@@ -71,21 +81,27 @@ end
         DER.coordinate_storage(grdE)
     end
 
-    # Gradient Acuracy
+    cache_fug = DER.allocate_cache(DER.fused_update_gradient!, Float64, N)
+    function ∇E_fused(q)
+        DER.coordinate_storage!(dr, q)
+        DER.fused_update_gradient!(∇E, rod, dr, rod_props, ref_strains, cache_fug)
+        DER.coordinate_storage(∇E)
+    end
+
     q = rand(4*N+7)
-    ∇Em = ∇E_mutating(q)
     ∇Er = ∇E_reference(q)
-    @test norm(∇Em - ∇Er)/norm(∇Er) < 1e-13
+    ∇Ef = ∇E_fused(q)
+    @test norm(∇Ef - ∇Er)/norm(∇Er) < 1e-13
 
     # Hessian Accuracy
-    jcfg = ForwardDiff.JacobianConfig(∇E_mutating, q)
+    jcfg = ForwardDiff.JacobianConfig(∇E_fused, q)
     DualType = eltype(jcfg)
 
-    gE = DER.allocate_delta(DualType, N)
+    ∇E = DER.allocate_delta(DualType, N)
     dr = DER.allocate_delta(DualType, N)
-    caches = DER.allocate_cache(DER.elastic_forces!, DualType, N)
+    cache_fug = DER.allocate_cache(DER.fused_update_gradient!, DualType, N)
 
-    HessE = ForwardDiff.jacobian(∇E_mutating, q, jcfg)
+    HessE = ForwardDiff.jacobian(∇E_fused, q, jcfg)
     err = HessE - FiniteDiff.finite_difference_hessian(E, q)
     @test norm(err)/norm(HessE) < 1e-5
 end

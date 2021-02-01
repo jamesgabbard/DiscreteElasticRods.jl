@@ -48,9 +48,9 @@ function allocate_rod(T::Type, ns::Int)
 end
 
 function allocate_strain(T::Type, ns::Int)
-    l = Matrix{T}(undef, ns+1)
+    l = Matrix{T}(undef, ns+1, 1)
     κ = Matrix{T}(undef, ns, 2)
-    τ = Matrix{T}(undef, ns)
+    τ = Matrix{T}(undef, ns, 1)
     rod_strains(l, κ, τ)
 end
 
